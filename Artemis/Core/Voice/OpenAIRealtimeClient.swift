@@ -17,6 +17,10 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     weak var delegate: RealtimeVoiceClientDelegate?
     private(set) var isConnected = false
     let handlesReasoning = true     // the model reasons (tools) and speaks audio
+    /// The raw-mic on-device captioner conflicts with WebRTC on device (echo, mic
+    /// starvation, voice cutting out). Off by default; the realtime transcript drives
+    /// her words instead.
+    static let useOnDeviceCaption = false
 
     /// Recent check-in context, set by the engine before connect, so the model
     /// can reason over real logged data (drift observations come from the model).
@@ -52,9 +56,6 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     private var lastSentConnState: String?
     private var lastSentUserSpeaking: Bool?
     private var lastSentModelSpeaking: Bool?
-    private var baseMuted = false          // the engine's intended mute state
-    private var modelSpeakingNow = false   // half-duplex: WebRTC mic muted while Artemis speaks
-    private var unmuteWork: DispatchWorkItem?   // delayed un-mute (echo tail guard)
 
     // MARK: connect
 
@@ -156,10 +157,15 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     /// realtime API's own transcript arrives only after the turn, so this drives
     /// the live bubble; if it cannot run, the realtime transcript is the fallback.
     private func startLiveCaption() {
-        // Live, word-by-word captions of HER speech from the RAW mic (AVAudioEngine),
-        // which is accurate, unlike feeding WebRTC's processed track (that garbled it).
-        // It owns her bubble during the turn; the post-turn realtime transcript is
-        // suppressed while it produces (handleChange's liveOwnsBubble), so no double.
+        // The raw-mic AVAudioEngine captioner fights WebRTC for the microphone on a
+        // real device: it breaks echo cancellation (she replies many times), starves
+        // the mic so the voice cuts out, and itself produces nothing. We rely on the
+        // realtime transcript for her words instead, which is reliable. Flip this to
+        // true only to experiment with the on-device live captioner.
+        guard Self.useOnDeviceCaption else {
+            ArtemisLog.info("LIVECAP: on-device caption disabled; realtime transcript drives her words.")
+            return
+        }
         liveProducedAnything = false
         conversation?.onLocalAudioBuffer = nil
         liveTranscriber.configure(languageName: preferredLanguage)
@@ -182,11 +188,10 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     }
 
     func setMuted(_ muted: Bool) {
-        baseMuted = muted
-        conversation?.muted = muted || modelSpeakingNow   // stay muted while Artemis speaks
+        conversation?.muted = muted   // muted ONLY when she pauses; never auto-muted mid-turn
         if muted { liveTranscriber.stop(); liveProducedAnything = false } else if isConnected { startLiveCaption() }
     }
-    func startListening() { baseMuted = false; conversation?.muted = modelSpeakingNow; if isConnected, !liveTranscriber.isRunning { startLiveCaption() } }
+    func startListening() { conversation?.muted = false; if isConnected, !liveTranscriber.isRunning { startLiveCaption() } }
     func stopListening() { liveTranscriber.stop() }   // tapping the wave / orb stops the live caption too
 
     func sendText(_ text: String, silent: Bool) async throws {
@@ -229,27 +234,10 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // re-trigger beginAssistantTurn() every tick and erase the streaming reply.
         let userSpeaking = convo.isUserSpeaking
         let modelSpeaking = convo.isModelSpeaking
-        // SAFE HALF-DUPLEX: mute the WebRTC mic FIRST (the property change propagates
-        // async through the audio layer, so it needs the most lead time), THEN pause
-        // the on-device caption. This removes the window where the mic is still hot
-        // but the recogniser is paused, which let Artemis's voice echo back, trip the
-        // VAD, and make her "keep talking" / reply twice. No engine cycling = no crash.
-        if modelSpeaking != modelSpeakingNow {
-            modelSpeakingNow = modelSpeaking
-            if modelSpeaking {
-                unmuteWork?.cancel(); unmuteWork = nil
-                conversation?.muted = true                       // mute instantly as Artemis starts
-            } else {
-                // Keep the mic muted for a short TAIL after she stops, so the speaker's
-                // echo tail dies before the mic reopens and can re-trigger a reply.
-                let work = DispatchWorkItem { [weak self] in
-                    guard let self else { return }
-                    self.conversation?.muted = self.baseMuted
-                }
-                unmuteWork = work
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
-            }
-        }
+        // NO app-level half-duplex muting. WebRTC's own echo cancellation handles the
+        // speaker bleed; muting the mic here was what made her voice cut out between
+        // turns. interruptResponse=false in the VAD config stops echo from restarting a
+        // reply. The mic is muted only when SHE pauses (setMuted), never automatically.
         liveTranscriber.setPaused(modelSpeaking)
         if st != lastSentConnState {
             lastSentConnState = st
@@ -285,7 +273,7 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // yields nothing (silence, or a device where the recogniser is unavailable),
         // the realtime transcript feeds the SAME live interim caption as a fallback,
         // so there is always a live transcription and never a duplicate.
-        let liveOwnsBubble = liveTranscriber.isRunning && liveProducedAnything
+        let liveOwnsBubble = Self.useOnDeviceCaption && liveTranscriber.isRunning && liveProducedAnything
         // Drive the on-device caption's turn boundary off the realtime VAD: when
         // she stops, close the bubble so the next words start a fresh one.
         if liveTranscriber.isRunning, wasUserSpeaking, !speaking { liveTranscriber.endTurn() }
