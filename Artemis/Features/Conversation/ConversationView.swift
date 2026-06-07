@@ -173,7 +173,8 @@ struct ConversationView: View {
     private static let bubbleTransition: AnyTransition = .asymmetric(
         insertion: AnyTransition.move(edge: .bottom)
             .combined(with: .opacity)
-            .combined(with: .scale(scale: 0.94, anchor: .bottom)),
+            .combined(with: .scale(scale: 0.94, anchor: .bottom))
+            .combined(with: .modifier(active: BubbleBlur(radius: 6), identity: BubbleBlur(radius: 0))),
         removal: AnyTransition.opacity.combined(with: .scale(scale: 0.98)))
 
     private var transcript: some View {
@@ -404,9 +405,13 @@ struct MicWaveform: View {
                 let t = tl.date.timeIntervalSinceReferenceDate
                 HStack(spacing: 2.5) {
                     ForEach(0..<bars, id: \.self) { i in
-                        let phase = sin((t * 4.5) - Double(i) * 0.7)
+                        // Each bar gets its own frequency + a slow amplitude swell, so the
+                        // waveform breathes like real listening instead of a flat sine.
+                        let freq = 3.6 + Double(i) * 0.62
+                        let swell = 0.78 + 0.22 * sin(t * 1.3 + Double(i))
+                        let phase = sin((t * freq) - Double(i) * 0.7)
                         Capsule().fill(color)
-                            .frame(width: 2.5, height: 5 + 13 * (0.5 + 0.5 * phase))
+                            .frame(width: 2.5, height: 4 + 15 * swell * (0.5 + 0.5 * phase))
                     }
                 }
             }
@@ -552,15 +557,27 @@ struct BubbleShape: Shape {
 struct InterimBubble: View {
     let text: String
     @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var entered = false
+    @State private var cursorOn = true
     var body: some View {
         HStack {
             Spacer(minLength: 40)
-            Text(text + "|")
+            // The cursor pulses while she speaks, so the caption clearly reads as live.
+            Text(text + (cursorOn ? " |" : "  "))
                 .font(ArtemisFont.sans(16))
                 .foregroundStyle(p.lilac700)
                 .padding(.horizontal, 15).padding(.vertical, 11)
                 .background(p.lilac100, in: BubbleShape(mine: true))
                 .overlay(BubbleShape(mine: true).stroke(p.lilac300, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+        }
+        .opacity(entered ? 1 : 0)
+        .offset(y: entered ? 0 : 10)
+        .blur(radius: entered ? 0 : 4)
+        .onAppear {
+            withAnimation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.45, dampingFraction: 0.82)) { entered = true }
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) { cursorOn = false }
         }
     }
 }
@@ -612,4 +629,10 @@ struct FullImageView: View {
         }
         .onTapGesture(perform: onClose)
     }
+}
+
+/// Blur component for the bubble entrance transition (blur → crisp as it settles).
+private struct BubbleBlur: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View { content.blur(radius: radius) }
 }

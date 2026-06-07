@@ -21,7 +21,8 @@ import Foundation
 
 	@discardableResult
 	func popFirst() -> T? {
-		array.removeFirst()
+		// PATCH (Artemis): guard against an empty array (removeFirst() traps on empty).
+		array.isEmpty ? nil : array.removeFirst()
 	}
 
 	func clear() {

@@ -231,7 +231,7 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
             modelSpeakingNow = modelSpeaking
             conversation?.muted = baseMuted || modelSpeaking
         }
-        liveTranscriber.paused = modelSpeaking
+        liveTranscriber.setPaused(modelSpeaking)
         if st != lastSentConnState {
             lastSentConnState = st
             delegate?.voiceClient(self, didChangeConnectionState: st)

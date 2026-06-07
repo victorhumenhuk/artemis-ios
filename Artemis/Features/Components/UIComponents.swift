@@ -94,8 +94,10 @@ struct PillButton: View {
 struct PressButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.975 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.92 : 1)
+            // A tactile micro-spring on press, then a soft settle on release.
+            .animation(.spring(response: 0.28, dampingFraction: 0.58), value: configuration.isPressed)
     }
 }
 

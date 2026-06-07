@@ -28,6 +28,17 @@ final class LiveTranscriber {
     /// own voice echoing from the speaker is never transcribed as if it were hers.
     nonisolated(unsafe) var paused = false
 
+    /// Pause/resume the caption feed. On RESUME (after Artemis finishes speaking),
+    /// guarantee a live recognition task exists, because the previous task may have
+    /// finalised during the pause. Without this, her first word of the next turn is
+    /// silently dropped while a new task spins up (the warm-up gap).
+    func setPaused(_ p: Bool) {
+        let wasPaused = paused
+        paused = p
+        guard wasPaused, !p, isRunning, request == nil else { return }
+        startTask()   // recogniser is warm and ready before her first buffer arrives
+    }
+
     /// (fullText, isFinalForThisTurn). Same turn keeps one bubble; endTurn closes it.
     var onText: ((String, Bool) -> Void)?
 

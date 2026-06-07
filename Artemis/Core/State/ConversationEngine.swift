@@ -1236,6 +1236,13 @@ extension ConversationEngine: ToolDispatcherDelegate {
 extension ConversationEngine: RealtimeVoiceClientDelegate {
     func voiceClientDidConnect(_ client: RealtimeVoiceClient) {}
 
+    /// A bare filler/backchannel with no content ("hm", "uh", "um", "mm", "er").
+    private func isBackchannel(_ s: String) -> Bool {
+        let t = s.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: " .,!?…"))
+        let fillers: Set<String> = ["hm", "hmm", "hmmm", "uh", "um", "umm", "mm", "mmm", "mhm", "uh huh", "er", "erm", "ahem"]
+        return fillers.contains(t)
+    }
+
     func voiceClient(_ client: RealtimeVoiceClient, didUpdateUserTranscript itemId: String, text: String, isFinal: Bool) {
         engage()   // she is speaking
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1250,6 +1257,9 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
         // FINAL: clear the live caption and commit her words to a real bubble.
         interim = ""
         guard !clean.isEmpty else { return }
+        // A bare filler ("hm", "uh", "um") is not a message: don't persist a bubble or
+        // start a thinking turn for it, so the thread stays clean.
+        if isBackchannel(clean) { return }
         if let uuid = userBubbleMap[itemId], let idx = messages.firstIndex(where: { $0.id == uuid }) {
             messages[idx].text = clean
         } else if let last = messages.last, last.role == .her,
@@ -1384,6 +1394,7 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
 
     func voiceClient(_ client: RealtimeVoiceClient, didChangeModelSpeaking speaking: Bool) {
         if speaking {
+            interim = ""   // her turn is over; clear the live caption as Artemis takes over
             if stateMachine.state != .silentTyping { stateMachine.enterResponding() }
         } else {
             stateMachine.settleAfterResponse()

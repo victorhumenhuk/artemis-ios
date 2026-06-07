@@ -80,7 +80,7 @@ enum SafeChecker {
     static func check(_ query: String) -> Result {
         let q = query.lowercased()
         if let e = entries.first(where: { $0.keys.contains(where: { q.contains($0) }) }) {
-            let matched = e.keys.first(where: { q.contains($0) }) ?? e.keys[0]
+            let matched = e.keys.first(where: { q.contains($0) }) ?? e.keys.first ?? "this"
             return Result(tier: e.tier, answer: e.answer,
                           notes: [e.tier == .routine || e.tier == .selfCare ? "Worth knowing" : "Worth checking soon"],
                           action: e.action, sourceTitle: e.title, sourceURL: e.url,
