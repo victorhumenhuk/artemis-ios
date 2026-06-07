@@ -267,11 +267,14 @@ private extension Conversation {
 
 					message.content[contentIndex] = .audio(.init(audio: audio.audio, transcript: transcript))
 				}
-			case let .responseOutputAudioDelta(_, _, itemId, _, contentIndex, delta):
+			case let .responseOutputAudioDelta(_, _, itemId, _, contentIndex, _):
+				// PATCH (Artemis): do NOT accumulate raw output-audio bytes in the
+				// message content. WebRTC plays the audio directly; keeping every delta
+				// here grew memory without bound on a long spoken reply and could crash
+				// the app on device. We keep only the transcript.
 				updateEvent(id: itemId) { message in
 					guard contentIndex < message.content.count,
-					      case let .audio(audio) = message.content[contentIndex] else { return }
-					message.content[contentIndex] = .audio(.init(audio: (audio.audio?.data ?? Data()) + delta.data, transcript: audio.transcript))
+					      case .audio = message.content[contentIndex] else { return }
 				}
 			case let .responseFunctionCallArgumentsDelta(_, _, itemId, _, _, delta):
 				updateEvent(id: itemId) { functionCall in
