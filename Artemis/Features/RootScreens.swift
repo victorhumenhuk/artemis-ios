@@ -8,10 +8,19 @@ import SwiftUI
 struct ArtemisRootScreens: View {
     @Environment(ConversationEngine.self) private var engine
     @Environment(\.palette) private var p
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    // Remembers which screen we came from, so the new screen slides in from the
+    // correct side (History is to the left, Settings to the right of Home).
+    @State private var lastRank = 1
+
+    private func rank(_ v: AppView) -> Int {
+        switch v { case .history: return 0; case .home: return 1; case .settings: return 2 }
+    }
 
     var body: some View {
         ZStack {
-            // Fluid, calm cross-dissolve with gentle depth between screens (Headspace/Flow feel).
+            // Directional page slide with depth: the destination glides in from the
+            // side it lives on, the old screen parallaxes out and dims (Headspace feel).
             Group {
                 switch engine.view {
                 case .home: ConversationView()
@@ -20,14 +29,28 @@ struct ArtemisRootScreens: View {
                 }
             }
             .id(engine.view)
-            .transition(.asymmetric(
-                insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .center)),
-                removal: .opacity.combined(with: .scale(scale: 1.02, anchor: .center))))
+            .transition(pageTransition)
 
             sheetHost
                 .animation(.spring(response: 0.42, dampingFraction: 0.86), value: engine.sheet)
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: engine.view)
+        .animation(reduceMotion ? .easeInOut(duration: 0.4) : .spring(response: 0.55, dampingFraction: 0.86), value: engine.view)
+        .onChange(of: engine.view) { _, new in lastRank = rank(new) }
+    }
+
+    /// Slide in from the destination's side, parallax + dim the old screen out.
+    private var pageTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        let forward = rank(engine.view) >= lastRank
+        let inEdge: Edge = forward ? .trailing : .leading
+        let outEdge: Edge = forward ? .leading : .trailing
+        return .asymmetric(
+            insertion: .move(edge: inEdge)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.94, anchor: .center)),
+            removal: .move(edge: outEdge)
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.94, anchor: .center)))
     }
 
     @ViewBuilder

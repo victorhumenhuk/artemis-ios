@@ -190,6 +190,7 @@ struct ArtemisSheet<Content: View>: View {
                 Color(hex: "222D2A").opacity(0.32)
                     .ignoresSafeArea()
                     .onTapGesture(perform: onClose)
+                    .transition(.opacity)   // dim fades in with the slide, no instant pop
                 VStack(spacing: 0) {
                     Capsule().fill(Color(hex: "283C37").opacity(0.18))
                         .frame(width: 38, height: 5)
