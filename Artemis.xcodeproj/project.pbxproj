@@ -121,7 +121,7 @@
 		B5AE04D0391D3F8F3C6D8BDB /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		B648D5555F3EA0938A7C2831 /* ArtemisLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtemisLog.swift; sourceTree = "<group>"; };
 		C38C859DB0ACF329475184C0 /* OrbView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrbView.swift; sourceTree = "<group>"; };
-		C45A57F109FEA2378F8BD40E /* Artemis.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Artemis.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C45A57F109FEA2378F8BD40E /* Artemis.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Artemis.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8798EC1FBC718B94A609F44 /* Reachability.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reachability.swift; sourceTree = "<group>"; };
 		D078EBC46054FE3BBEBF5957 /* NHSContentGenerated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NHSContentGenerated.swift; sourceTree = "<group>"; };
 		D19287C70AC01CA6AEDF6934 /* Spectral-MediumItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Spectral-MediumItalic.ttf"; sourceTree = "<group>"; };
@@ -599,7 +599,6 @@
 				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = X595LC6BJH;
 				INFOPLIST_FILE = Artemis/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -685,7 +684,6 @@
 				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = X595LC6BJH;
 				INFOPLIST_FILE = Artemis/Resources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

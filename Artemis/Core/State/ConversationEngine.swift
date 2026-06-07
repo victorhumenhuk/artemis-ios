@@ -174,6 +174,9 @@ final class ConversationEngine: NSObject {
     /// "Tap to reconnect".
     private var isReconnecting = false
     private var reconnectAttempt = 0
+    /// Debounce token for the standalone nearest-unit card, so a red-flag verdict
+    /// wins over a routine "nearest unit" card in the same turn.
+    private var pendingNearestToken: UUID?
     var micHot: Bool { stateMachine.state.micHot && !stateMachine.micMuted && !micPaused }
     var usingRealtime: Bool { voiceMode == .realtime && voiceClient?.handlesReasoning == true }
     var connectionFailed: Bool { voiceMode == .failed }
@@ -1189,18 +1192,30 @@ extension ConversationEngine: ToolDispatcherDelegate {
             Haptics.tap()
             return
         }
-        verdict = TriageResult(
-            tier: .routine,
-            spokenResponse: "Your nearest NHS maternity unit is \(unit.name).",
-            matchedCondition: "Nearest maternity unit",
-            redFlagsDetected: [],
-            nhsSourceTitle: "Find maternity services, NHS",
-            nhsSourceURL: "https://www.nhs.uk/service-search/maternity-services/",
-            recommendedAction: "Tap below to call \(unit.name).",
-            routeTo: .maternityTriage,
-            sourceNote: live ? "NHS Directory of Services, live" : "Cached NHS list")
-        sheet = .verdict
-        Haptics.tap()
+        // No verdict yet. A symptom turn usually fires assess_symptoms a moment after
+        // find_nearest, so wait briefly: if a triage verdict (urgent/emergency) lands,
+        // the unit just attaches to it. Only if NOTHING arrives do we show a standalone
+        // routine nearest-unit card. This stops the routine card flashing before the
+        // real verdict (the "starts routine then goes to emergency" bug).
+        let token = UUID()
+        pendingNearestToken = token
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            guard self.pendingNearestToken == token else { return }   // superseded by a newer call
+            if let v = self.verdict, v.tier == .urgent || v.tier == .emergency { self.sheet = .verdict; return }
+            self.verdict = TriageResult(
+                tier: .routine,
+                spokenResponse: "Your nearest NHS maternity unit is \(unit.name).",
+                matchedCondition: "Nearest maternity unit",
+                redFlagsDetected: [],
+                nhsSourceTitle: "Find maternity services, NHS",
+                nhsSourceURL: "https://www.nhs.uk/service-search/maternity-services/",
+                recommendedAction: "Tap below to call \(unit.name).",
+                routeTo: .maternityTriage,
+                sourceNote: live ? "NHS Directory of Services, live" : "Cached NHS list")
+            self.sheet = .verdict
+            Haptics.tap()
+        }
     }
 
     func toolsDidLogCheckin(_ log: CheckinLog) {}
@@ -1213,20 +1228,24 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
 
     func voiceClient(_ client: RealtimeVoiceClient, didUpdateUserTranscript itemId: String, text: String, isFinal: Bool) {
         engage()   // she is speaking
-        interim = ""
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !isFinal {
+            // LIVE caption: her words build, word by word, in the interim bubble (a
+            // right-aligned bubble with a typing cursor) AS she speaks. This is the
+            // visible "live transcription". It commits to a real bubble on the final.
+            interim = clean
+            if stateMachine.state != .silentTyping { stateMachine.enterListening() }
+            return
+        }
+        // FINAL: clear the live caption and commit her words to a real bubble.
+        interim = ""
         guard !clean.isEmpty else { return }
-        // Render HER words LIVE in ONE bubble keyed by the transcription item id:
-        // every delta updates the SAME bubble in place, so she sees her words build
-        // as she speaks. A pause that splits her sentence into a new item is merged
-        // back, so "I have a little bit" + "...of fever" never shows as two bubbles.
         if let uuid = userBubbleMap[itemId], let idx = messages.firstIndex(where: { $0.id == uuid }) {
             messages[idx].text = clean
         } else if let last = messages.last, last.role == .her,
                   isContinuation(prev: last.text, next: clean),
                   let li = messages.firstIndex(where: { $0.id == last.id }) {
-            // The previous turn is still her last bubble (Artemis has not replied):
-            // a pause split her sentence, so merge into it rather than duplicate.
+            // A pause split her sentence into a new item: merge rather than duplicate.
             messages[li].text = clean
             userBubbleMap[itemId] = messages[li].id
         } else {
@@ -1234,11 +1253,7 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
             userBubbleMap[itemId] = msg.id
             messages.append(msg)
         }
-        if !isFinal {
-            if stateMachine.state != .silentTyping { stateMachine.enterListening() }
-            return
-        }
-        // Final transcript for this item: persist once, then move to thinking.
+        // Persist once, then move to thinking.
         if !persistedUserItems.contains(itemId) {
             persistedUserItems.insert(itemId)
             store.addChatTurn(role: "her", text: clean)
@@ -1302,6 +1317,7 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
     /// New user turn: the next assistant text starts a fresh single bubble.
     private func beginAssistantTurn() {
         turnBubbleID = nil
+        pendingNearestToken = nil   // cancel any pending standalone nearest-unit card
         // Clear the verdict at the turn boundary so a fresh reply (e.g. a greeting
         // after an urgent card) never inherits the previous turn's urgency/chips.
         verdict = nil; verdictService = nil; verdictUnit = nil

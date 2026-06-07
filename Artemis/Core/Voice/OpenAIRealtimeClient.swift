@@ -262,10 +262,11 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // produced words, so skip the realtime transcript to avoid a second bubble.
         // If the on-device capture yields nothing (mic owned by WebRTC), fall back
         // to the realtime transcript so a bubble still appears.
-        // The on-device caption is the SOLE source of her bubble whenever it is
-        // running, so the post-turn realtime transcript never adds a second bubble
-        // (the "double voice"). The realtime transcript still feeds the model.
-        let liveOwnsBubble = liveTranscriber.isRunning
+        // The on-device caption owns her transcript once it has produced words. If it
+        // yields nothing (silence, or a device where the recogniser is unavailable),
+        // the realtime transcript feeds the SAME live interim caption as a fallback,
+        // so there is always a live transcription and never a duplicate.
+        let liveOwnsBubble = liveTranscriber.isRunning && liveProducedAnything
         // Drive the on-device caption's turn boundary off the realtime VAD: when
         // she stops, close the bubble so the next words start a fresh one.
         if liveTranscriber.isRunning, wasUserSpeaking, !speaking { liveTranscriber.endTurn() }
