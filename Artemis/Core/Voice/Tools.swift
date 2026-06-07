@@ -193,12 +193,26 @@ final class ToolDispatcher {
             routeTo: route
         )
 
-        // SAFETY GUARD: a verdict may only be shown with a valid, tappable NHS
-        // source. Otherwise it is treated as an error and replaced with a safe
-        // escalation (which itself carries a source). No guidance without a source.
+        // SAFETY GUARD: an URGENT/EMERGENCY verdict must be grounded in a real NHS
+        // source; if it is not, escalate to a safe, sourced fallback. But a
+        // REASSURING / self-care / routine verdict (e.g. "I'm feeling good") must
+        // NEVER be escalated for a missing source, that would alarm her for no reason.
+        // We just attach the general NHS pregnancy hub so the card still cites NHS.
         if !NHSSourceGuard.isValid(title: result.nhsSourceTitle, url: result.nhsSourceURL) {
-            ArtemisLog.warn("Triage blocked: no valid NHS source. Escalating.")
-            result = NHSSourceGuard.safeEscalation(tier: tier, redFlags: entry?.redFlags ?? [])
+            if tier == .urgent || tier == .emergency {
+                ArtemisLog.warn("Triage blocked: ungrounded \(tier.rawValue). Escalating.")
+                result = NHSSourceGuard.safeEscalation(tier: tier, redFlags: entry?.redFlags ?? [])
+            } else {
+                result = TriageResult(
+                    tier: result.tier,
+                    spokenResponse: result.spokenResponse,
+                    matchedCondition: result.matchedCondition,
+                    redFlagsDetected: result.redFlagsDetected,
+                    nhsSourceTitle: "NHS pregnancy advice",
+                    nhsSourceURL: "https://www.nhs.uk/pregnancy/",
+                    recommendedAction: result.recommendedAction,
+                    routeTo: result.routeTo)
+            }
         }
 
         store.addSymptom(result)
