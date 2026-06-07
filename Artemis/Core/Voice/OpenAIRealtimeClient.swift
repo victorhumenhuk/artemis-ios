@@ -91,16 +91,23 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
             // Longer silence window so a brief pause mid-sentence does not split her
             // utterance into two turns (which caused the duplicate "...twice" bubble
             // and a double reply). One natural pause stays one turn.
-            // Higher threshold + a touch longer silence, so background noise and the
-            // loudspeaker echoing Artemis's own voice do NOT trip the VAD. interruptResponse
-            // false means detected speech (including her own voice echoing from the
-            // speaker) can NOT cut off and restart her reply, which is what made her
-            // answer over and over. prefixPadding keeps her first words.
+            // Higher threshold + a touch longer silence so background noise does not
+            // trip the VAD. interruptResponse is TRUE so she can barge in and stop
+            // Artemis mid-reply, and so a finished turn is not blocked from creating
+            // the next response (interruptResponse=false caused
+            // conversation_already_has_active_response). The on-device captioner is off
+            // now, so WebRTC's own echo cancellation handles the speaker bleed rather
+            // than app-level muting. prefixPadding keeps her first words.
             session.audio.input.turnDetection = .serverVad(createResponse: true, interruptResponse: true, prefixPaddingMs: 300, silenceDurationMs: 1000, threshold: 0.62)
             session.tools = OpenAIRealtimeClient.makeTools()
             session.toolChoice = .auto
         }
         self.conversation = convo
+        // Reset edge-detection on every (re)connect, so a reconnect does not inherit
+        // stale speaking/connection state from the previous session and miss the first
+        // transition.
+        lastSentConnState = nil; lastSentUserSpeaking = nil; lastSentModelSpeaking = nil
+        sawAudio = false
         // Tap the raw JSON at the receive/send boundary (before decode), and
         // surface decode failures, for the developer console.
         RealtimeRawTap.inbound = { raw in Task { @MainActor in RealtimeEventLog.shared.record(raw) } }

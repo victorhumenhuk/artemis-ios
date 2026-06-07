@@ -143,7 +143,7 @@ struct DebugView: View {
     }
 
     private func probe(path: String, _ parse: @escaping (Data) -> String) async -> Probe {
-        let url = URL(string: RealtimeConfig.serverBaseURL.absoluteString + "/" + path)!
+        guard let url = URL(string: RealtimeConfig.serverBaseURL.absoluteString + "/" + path) else { return .fail("invalid URL") }
         var req = URLRequest(url: url); req.timeoutInterval = 6
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
@@ -154,7 +154,7 @@ struct DebugView: View {
         } catch { return .fail("unreachable") }
     }
     private func probePost(path: String, _ parse: @escaping (Data) -> String) async -> Probe {
-        let url = URL(string: RealtimeConfig.serverBaseURL.absoluteString + "/" + path)!
+        guard let url = URL(string: RealtimeConfig.serverBaseURL.absoluteString + "/" + path) else { return .fail("invalid URL") }
         var req = URLRequest(url: url); req.httpMethod = "POST"; req.timeoutInterval = 8
         req.setValue("application/json", forHTTPHeaderField: "Content-Type"); req.httpBody = Data("{}".utf8)
         do {

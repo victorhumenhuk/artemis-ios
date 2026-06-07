@@ -128,7 +128,7 @@ struct NHSCitation: View {
     var sourceNote: String = "Cached NHS guidance"
     @Environment(\.palette) private var p
     var body: some View {
-        Link(destination: URL(string: url) ?? URL(string: "https://www.nhs.uk")!) {
+        Link(destination: URL(string: url) ?? URL(string: "https://www.nhs.uk") ?? URL(fileURLWithPath: "/")) {
             HStack(spacing: 10) {
                 Text("NHS")
                     .font(ArtemisFont.sans(12, .heavy))

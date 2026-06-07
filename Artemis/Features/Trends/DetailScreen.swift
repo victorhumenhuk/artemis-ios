@@ -344,7 +344,7 @@ struct BPChart: View {
             }
         } else if let v = values.first {
             // A single reading shows as one dot, so the card isn't blank on day one.
-            let yy = pad + (h - pad * 2) * (1 - CGFloat((v - lo) / (hi - lo)))
+            let yy = pad + (h - pad * 2) * (1 - CGFloat((v - lo) / (hi > lo ? (hi - lo) : 1)))
             Circle().fill(p.surface).overlay(Circle().stroke(color, lineWidth: 2.5))
                 .frame(width: 8, height: 8).position(x: w / 2, y: yy)
         }
