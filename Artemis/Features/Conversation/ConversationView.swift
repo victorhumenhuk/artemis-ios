@@ -174,7 +174,7 @@ struct ConversationView: View {
         insertion: AnyTransition.move(edge: .bottom)
             .combined(with: .opacity)
             .combined(with: .scale(scale: 0.94, anchor: .bottom))
-            .combined(with: .modifier(active: BubbleBlur(radius: 6), identity: BubbleBlur(radius: 0))),
+            .combined(with: .modifier(active: BubbleBlur(radius: 2.5), identity: BubbleBlur(radius: 0))),
         removal: AnyTransition.opacity.combined(with: .scale(scale: 0.98)))
 
     private var transcript: some View {

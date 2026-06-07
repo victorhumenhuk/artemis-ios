@@ -187,13 +187,13 @@ struct FlowLayout: Layout {
 // MARK: - Premium staggered reveal
 
 private extension View {
-    /// A soft, staggered reveal: each element lifts, fades and un-blurs in turn, so
-    /// the verdict card unfolds with a calm, Headspace-grade rhythm.
+    /// A quick fade + small lift. NO blur and a tiny stagger, so the card snaps in
+    /// fast and never looks frozen/blurry (heavy blur on 8 elements stalled the
+    /// reveal on the simulator and read as a crash).
     func reveal(_ shown: Bool, _ index: Int) -> some View {
         self
             .opacity(shown ? 1 : 0)
-            .offset(y: shown ? 0 : 18)
-            .blur(radius: shown ? 0 : 5)
-            .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06), value: shown)
+            .offset(y: shown ? 0 : 8)
+            .animation(.easeOut(duration: 0.28).delay(Double(index) * 0.025), value: shown)
     }
 }
