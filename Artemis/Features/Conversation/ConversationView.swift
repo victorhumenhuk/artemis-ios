@@ -586,13 +586,22 @@ struct InterimBubble: View {
     var body: some View {
         HStack {
             Spacer(minLength: 40)
-            // The cursor pulses while she speaks, so the caption clearly reads as live.
-            Text(text + (cursorOn ? " |" : "  "))
-                .font(ArtemisFont.sans(16))
-                .foregroundStyle(p.lilac700)
-                .padding(.horizontal, 15).padding(.vertical, 11)
-                .background(p.lilac100, in: BubbleShape(mine: true))
-                .overlay(BubbleShape(mine: true).stroke(p.lilac300, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            // The cursor is a SEPARATE element so its pulse never crossfades the text
+            // (which caused the caption to ghost/double). The text updates instantly.
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(text)
+                    .font(ArtemisFont.sans(16))
+                    .foregroundStyle(p.lilac700)
+                    .contentTransition(.identity)
+                    .animation(nil, value: text)
+                Text("|")
+                    .font(ArtemisFont.sans(16))
+                    .foregroundStyle(p.lilac700)
+                    .opacity(cursorOn ? 1 : 0.12)
+            }
+            .padding(.horizontal, 15).padding(.vertical, 11)
+            .background(p.lilac100, in: BubbleShape(mine: true))
+            .overlay(BubbleShape(mine: true).stroke(p.lilac300, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
         }
         .opacity(entered ? 1 : 0)
         .offset(y: entered ? 0 : 10)
