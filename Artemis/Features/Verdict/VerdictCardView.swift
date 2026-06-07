@@ -16,6 +16,7 @@ struct VerdictSheetView: View {
     var onAdvocacy: () -> Void
     var onCall: () -> Void
     @Environment(\.palette) private var p
+    @State private var shown = false   // drives the staggered reveal
 
     private var meta: TierMeta {
         switch result.tier {
@@ -31,23 +32,25 @@ struct VerdictSheetView: View {
         ArtemisSheet(onClose: onClose) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    heroCard
-                    OverlineLabel(text: "What Artemis noticed").padding(.top, 20).padding(.bottom, 10)
-                    flags
-                    actionCard.padding(.top, 14)
-                    NHSCitation(title: result.nhsSourceTitle, url: result.nhsSourceURL, sourceNote: result.sourceNote).padding(.top, 18)
-                    if let service { callBlock(service).padding(.top, 12) }
-                    advocacyButton.padding(.top, 12)
+                    heroCard.reveal(shown, 0)
+                    OverlineLabel(text: "What Artemis noticed").padding(.top, 20).padding(.bottom, 10).reveal(shown, 1)
+                    flags.reveal(shown, 2)
+                    actionCard.padding(.top, 14).reveal(shown, 3)
+                    NHSCitation(title: result.nhsSourceTitle, url: result.nhsSourceURL, sourceNote: result.sourceNote).padding(.top, 18).reveal(shown, 4)
+                    if let service { callBlock(service).padding(.top, 12).reveal(shown, 5) }
+                    advocacyButton.padding(.top, 12).reveal(shown, 6)
                     Text("Artemis never diagnoses. She checks NHS guidance and helps you be heard.")
                         .font(ArtemisFont.sans(11.5))
                         .foregroundStyle(p.inkMute)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 12).padding(.top, 16)
+                        .reveal(shown, 7)
                 }
                 .padding(.horizontal, 22).padding(.top, 14).padding(.bottom, 26)
             }
             .scrollIndicators(.hidden)
+            .onAppear { shown = true }
         }
     }
 
@@ -166,5 +169,19 @@ struct FlowLayout: Layout {
             s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
             x += sz.width + spacing; rowH = max(rowH, sz.height)
         }
+    }
+}
+
+// MARK: - Premium staggered reveal
+
+private extension View {
+    /// A soft, staggered reveal: each element lifts, fades and un-blurs in turn, so
+    /// the verdict card unfolds with a calm, Headspace-grade rhythm.
+    func reveal(_ shown: Bool, _ index: Int) -> some View {
+        self
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 18)
+            .blur(radius: shown ? 0 : 5)
+            .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06), value: shown)
     }
 }

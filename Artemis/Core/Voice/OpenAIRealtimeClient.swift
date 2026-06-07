@@ -222,16 +222,16 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // re-trigger beginAssistantTurn() every tick and erase the streaming reply.
         let userSpeaking = convo.isUserSpeaking
         let modelSpeaking = convo.isModelSpeaking
-        // Pause the on-device caption's feed while Artemis speaks, so her voice
-        // echoing from the speaker is never transcribed as if it were the user.
-        liveTranscriber.paused = modelSpeaking
-        // SAFE HALF-DUPLEX: mute the WebRTC mic while Artemis speaks so her own voice
-        // cannot echo back, trip the VAD, and make her "keep talking" / reply twice.
-        // No engine cycling here (the transcriber is only paused), so no crash risk.
+        // SAFE HALF-DUPLEX: mute the WebRTC mic FIRST (the property change propagates
+        // async through the audio layer, so it needs the most lead time), THEN pause
+        // the on-device caption. This removes the window where the mic is still hot
+        // but the recogniser is paused, which let Artemis's voice echo back, trip the
+        // VAD, and make her "keep talking" / reply twice. No engine cycling = no crash.
         if modelSpeaking != modelSpeakingNow {
             modelSpeakingNow = modelSpeaking
             conversation?.muted = baseMuted || modelSpeaking
         }
+        liveTranscriber.paused = modelSpeaking
         if st != lastSentConnState {
             lastSentConnState = st
             delegate?.voiceClient(self, didChangeConnectionState: st)

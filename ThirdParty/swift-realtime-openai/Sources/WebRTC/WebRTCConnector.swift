@@ -167,7 +167,10 @@ private extension WebRTCConnector {
 		do { try await connection.setLocalDescription(sdp) }
 		catch { throw WebRTCError.failedToSetLocalDescription(error) }
 
-		let remoteSdp = try await fetchRemoteSDP(using: request, localSdp: connection.localDescription!.sdp)
+		// PATCH (Artemis): guard the local SDP rather than force-unwrap (a nil here on a
+		// flaky connection would crash the app instead of failing recoverably).
+		guard let localSdp = connection.localDescription?.sdp else { throw WebRTCError.failedToSetLocalDescription(NSError(domain: "WebRTC", code: -1)) }
+		let remoteSdp = try await fetchRemoteSDP(using: request, localSdp: localSdp)
 
 		do { try await connection.setRemoteDescription(LKRTCSessionDescription(type: .answer, sdp: remoteSdp)) }
 		catch { throw WebRTCError.failedToSetRemoteDescription(error) }

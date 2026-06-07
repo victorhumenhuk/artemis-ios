@@ -73,8 +73,9 @@ public final class WebSocketConnector: NSObject, Connector, Sendable {
 	}
 
 	public func send(event: ClientEvent) async throws {
-		let message = try URLSessionWebSocketTask.Message.string(String(data: encoder.encode(event), encoding: .utf8)!)
-		try await webSocket.send(message)
+		// PATCH (Artemis): guard the UTF-8 encoding instead of force-unwrapping.
+		guard let json = try String(data: encoder.encode(event), encoding: .utf8) else { return }
+		try await webSocket.send(.string(json))
 	}
 
 	public func disconnect() {

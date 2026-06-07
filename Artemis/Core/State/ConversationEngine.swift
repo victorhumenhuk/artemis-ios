@@ -330,7 +330,10 @@ final class ConversationEngine: NSObject {
             client.delegate = self
             client.preferredLanguage = store.profile()?.language   // on-device live caption locale
             client.sessionContext = modelContext()
-            client.greetOnConnect = !isReturning
+            // Greet ONLY when there is no conversation yet. Basing this on the live
+            // message state (not a stale isReturning flag) means a reconnect or a
+            // manual retry never re-greets mid-conversation ("Hi Sarah, I'm Artemis…").
+            client.greetOnConnect = messages.isEmpty
             do {
                 try await client.connect()
                 voiceClient = client
@@ -822,6 +825,10 @@ final class ConversationEngine: NSObject {
     /// heuristics guess urgency. With no verdict it is not a triage: a greeting
     /// gets nothing, anything else a single gentle, non-clinical prompt.
     func actionsFor(text: String) -> [MessageAction] {
+        // An "already logged" confirmation never carries action chips, even if a
+        // verdict from a previous turn is still set (it must not inherit those chips).
+        let low = text.lowercased()
+        if ["logged", "noted,"].contains(where: { low.hasPrefix($0) }) { return [] }
         if let v = verdict {
             if verdictUncertain { return cap([.checkWithPro, .turnIntoScript]) }
             switch v.tier {
@@ -841,6 +848,9 @@ final class ConversationEngine: NSObject {
     private func conversationalActions(_ lower: String) -> [MessageAction] {
         if isChitChat(lower) { return [] }                       // greeting / small talk → nothing
         if lower.contains("?") { return [] }                     // Artemis asked her something → let her answer
+        // Already-logged confirmations ("Logged your mood…", "Noted, fever…") must NOT
+        // offer "Log this" again, even though they contain loggable words.
+        if ["logged", "noted,"].contains(where: { lower.hasPrefix($0) }) { return [] }
         if lower.contains("midwife") || lower.contains("gp ") || lower.contains("doctor") || lower.contains("111") {
             return [.checkWithPro]                                // pointed her to a professional
         }

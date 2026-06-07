@@ -112,6 +112,11 @@ struct RootView: View {
         }
         engine.onboarded = true
         didStart = true
+        // Render-only test of the live caption (no connection needed).
+        if demo == "interim" {
+            engine.interim = "I have a really bad headache and my vision has gone blurry"
+            return
+        }
         await engine.startSession()
 
         // Proof demo: a typed turn to generate response events, then the console.
@@ -129,6 +134,7 @@ struct RootView: View {
         case "safecheck": engine.submitSafeCheck(ProcessInfo.processInfo.environment["ARTEMIS_SAFE_QUERY"] ?? "ibuprofen"); return
         case "nearest":   engine.findNearestUnitNow(); return
         case "advocacy":  engine.store.seedDemoDataIfEmpty(); engine.buildAdvocacy(); return
+        case "interim":   engine.interim = "I have a really bad headache and my vision has gone blurry"; return
         case "image":     engine.send("Is this safe", imageData: Self.testFlowerJPEG()); return
         default: break
         }
