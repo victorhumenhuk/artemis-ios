@@ -1211,7 +1211,7 @@ extension ConversationEngine: ToolDispatcherDelegate {
         let token = UUID()
         pendingNearestToken = token
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            try? await Task.sleep(nanoseconds: 800_000_000)
             guard self.pendingNearestToken == token else { return }   // superseded by a newer call
             if let v = self.verdict, v.tier == .urgent || v.tier == .emergency { self.sheet = .verdict; return }
             self.verdict = TriageResult(

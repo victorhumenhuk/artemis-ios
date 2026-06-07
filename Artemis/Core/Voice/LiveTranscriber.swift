@@ -57,6 +57,14 @@ final class LiveTranscriber {
 
         // Install the tap + start the engine ONCE.
         let input = audioEngine.inputNode
+        // CRITICAL: enable voice processing (acoustic echo cancellation + noise
+        // suppression) on this input. Without it, tapping the RAW mic alongside
+        // WebRTC disabled iOS's echo cancellation, so the speaker playing Artemis's
+        // voice fed straight back into the mic, was heard as the user speaking, and
+        // made her reply over and over (the "7 answers by voice" bug). With it, this
+        // engine shares the same echo-cancelled input WebRTC uses.
+        do { try input.setVoiceProcessingEnabled(true) }
+        catch { ArtemisLog.warn("LIVECAP: voice processing unavailable (\(error)); continuing") }
         let format = input.outputFormat(forBus: 0)
         ArtemisLog.info("LIVECAP: input format sr=\(format.sampleRate) ch=\(format.channelCount)")
         guard format.channelCount > 0, format.sampleRate > 0 else {
