@@ -1,0 +1,12 @@
+name = "artemis-token-server"
+main = "src/index.ts"
+compatibility_date = "2026-05-01"
+
+# NHS Website Content API base. Integration test environment.
+[vars]
+NHS_BASE = "https://int.api.service.nhs.uk/nhs-website-content"
+
+# Secrets are NOT set here. Locally they come from .dev.vars (gitignored).
+# In production set them with:
+#   wrangler secret put OPENAI_API_KEY
+#   wrangler secret put NHS_CONTENT_API_KEY

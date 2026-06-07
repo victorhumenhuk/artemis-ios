@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>ArtemisServerBaseURL</key>
+	<string>https://artemis-token-server.artemis-care.workers.dev</string>
+	<key>ArtemisUseRealtime</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Artemis</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Artemis</string>
+	<key>CFBundlePackageType</key>
+	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Used to show Artemis a photo, like swelling or a test result, when it helps her understand. Photos stay on your phone unless you share them.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used once to find your nearest NHS maternity unit. Your location never leaves your phone.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Artemis listens so you can talk to her. Your audio is never stored.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used to attach a photo to your conversation when it helps Artemis understand.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This turns your voice into text on your phone, so Artemis can understand you.</string>
+	<key>RevenueCatAPIKey</key>
+	<string>appl_REPLACE_ME</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>HankenGrotesk.ttf</string>
+		<string>Spectral-Regular.ttf</string>
+		<string>Spectral-Medium.ttf</string>
+		<string>Spectral-SemiBold.ttf</string>
+		<string>Spectral-Italic.ttf</string>
+		<string>Spectral-MediumItalic.ttf</string>
+	</array>
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>AccentColor</string>
+	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+	</array>
+</dict>
+</plist>

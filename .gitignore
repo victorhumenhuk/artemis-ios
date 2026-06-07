@@ -1,0 +1,20 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+.DS_Store
+
+# SwiftPM
+.swiftpm/
+.build/
+Package.resolved
+
+# Secrets — NEVER commit
+server/.dev.vars
+*.local
+
+# Node / wrangler
+server/node_modules/
+server/.wrangler/

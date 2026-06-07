@@ -1,0 +1,9 @@
+# Copy to .dev.vars and fill in. .dev.vars is gitignored.
+OPENAI_API_KEY=sk-proj-...your-openai-key...
+
+# NHS Website Content API credentials from https://digital.nhs.uk/developer
+# The Key goes in the `apikey` header (used by the Worker). The Secret is only
+# needed for the OAuth2 application-restricted (signed JWT) flow.
+NHS_CONTENT_API_KEY=...your-nhs-key...
+NHS_CONTENT_API_SECRET=...your-nhs-secret...
+

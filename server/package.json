@@ -1,0 +1,16 @@
+{
+  "name": "artemis-token-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Token server for Artemis: mints OpenAI Realtime ephemeral keys and proxies the NHS Website Content API.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^3.90.0"
+  }
+}
