@@ -96,7 +96,7 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
             // false means detected speech (including her own voice echoing from the
             // speaker) can NOT cut off and restart her reply, which is what made her
             // answer over and over. prefixPadding keeps her first words.
-            session.audio.input.turnDetection = .serverVad(createResponse: true, interruptResponse: false, prefixPaddingMs: 300, silenceDurationMs: 1000, threshold: 0.62)
+            session.audio.input.turnDetection = .serverVad(createResponse: true, interruptResponse: true, prefixPaddingMs: 300, silenceDurationMs: 1000, threshold: 0.62)
             session.tools = OpenAIRealtimeClient.makeTools()
             session.toolChoice = .auto
         }
@@ -326,11 +326,21 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         return t.isEmpty ? nil : t
     }
 
+    private var createResponseWork: DispatchWorkItem?
+
     private func runTool(_ call: Item.FunctionCall) async {
         ArtemisLog.info("Realtime: tool call \(call.name)")
         let output = await delegate?.voiceClient(self, requestsTool: call.name, callId: call.callId, argumentsJSON: call.arguments) ?? "{}"
         try? conversation?.send(result: .init(id: String(UUID().uuidString.prefix(32)), callId: call.callId, output: output))
-        try? conversation?.send(event: .createResponse())
+        // Debounce the follow-up response: when the model calls SEVERAL tools in one
+        // turn (e.g. NHS lookup + assess), each tool result must NOT fire its own
+        // createResponse, or the second collides with the first
+        // ("conversation_already_has_active_response") and the whole turn breaks. We
+        // send exactly ONE createResponse after the last tool of the batch settles.
+        createResponseWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in try? self?.conversation?.send(event: .createResponse()) }
+        createResponseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
     }
 
     // MARK: tools (mirror Tools.swift, expressed in the SDK schema DSL)
