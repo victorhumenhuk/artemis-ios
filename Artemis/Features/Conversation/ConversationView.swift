@@ -479,6 +479,26 @@ struct BubbleView: View {
                         }
                     }
                     .padding(.top, 3)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+                }
+                // NHS grounding, visible right under a clinical reply (not just on the card).
+                if !mine, let title = message.nhsTitle,
+                   let url = URL(string: message.nhsURL ?? "") ?? URL(string: "https://www.nhs.uk") {
+                    Link(destination: url) {
+                        HStack(spacing: 6) {
+                            Text("NHS").font(ArtemisFont.sans(9, .heavy)).foregroundStyle(.white)
+                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                .background(Color(hex: "005EB8"), in: Capsule())
+                            Text(title).font(ArtemisFont.sans(12, .medium)).foregroundStyle(p.inkSoft).lineLimit(1)
+                            Icon(name: "link", size: 11).foregroundStyle(p.inkMute)
+                        }
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background(p.surface, in: Capsule())
+                        .overlay(Capsule().stroke(p.lilac300, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 3)
+                    .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .leading)))
                 }
                 Text(message.date, format: .dateTime.hour().minute())
                     .font(ArtemisFont.sans(10.5)).foregroundStyle(p.inkMute)
@@ -487,6 +507,9 @@ struct BubbleView: View {
             if !mine { Spacer(minLength: 40) }
         }
         .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
+        // Chips and the NHS source settle in gently when they attach to a reply.
+        .animation(.spring(response: 0.42, dampingFraction: 0.82), value: message.actions.count)
+        .animation(.spring(response: 0.42, dampingFraction: 0.82), value: message.nhsTitle)
     }
 
     private func actionChip(_ a: MessageAction) -> some View {

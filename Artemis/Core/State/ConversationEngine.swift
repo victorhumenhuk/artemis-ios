@@ -52,6 +52,8 @@ struct ChatMessage: Identifiable, Equatable {
     var imageData: Data? = nil
     var date: Date = Date()
     var actions: [MessageAction] = []
+    var nhsTitle: String? = nil   // NHS source shown under a clinical reply
+    var nhsURL: String? = nil
 }
 
 enum ActiveSheet: Identifiable, Equatable {
@@ -465,7 +467,7 @@ final class ConversationEngine: NSObject {
                 let dataURL = "data:image/jpeg;base64," + img.base64EncodedString()
                 let reply = await VisionClient.assess(dataURL: dataURL, prompt: trimmed)
                 stateMachine.settleAfterResponse()
-                appendArtemis(reply)
+                confirmAndSpeak(reply)   // photo replies are spoken too, unless on silent
                 return
             }
             if usingRealtime, let vc = voiceClient {
@@ -1002,6 +1004,7 @@ final class ConversationEngine: NSObject {
         msg.actions = actionsFor(text: clean)
         turnBubbleID = msg.id
         messages.append(msg)
+        attachNHSSource()
         store.addChatTurn(role: "artemis", text: clean)
     }
 
@@ -1350,10 +1353,20 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
             turnBubbleID = msg.id
             messages.append(msg)
         }
+        attachNHSSource()
         if isFinal, let bid = turnBubbleID, !persistedBubbleIDs.contains(bid), looksComplete(clean) {
             persistedBubbleIDs.insert(bid)
             store.addChatTurn(role: "artemis", text: clean)
         }
+    }
+
+    /// Surface the current verdict's NHS source under the turn's assistant bubble, so
+    /// the grounding is visible in the chat itself, not only on the verdict card.
+    private func attachNHSSource() {
+        guard let v = verdict, NHSSourceGuard.isValid(title: v.nhsSourceTitle, url: v.nhsSourceURL),
+              let bid = turnBubbleID, let i = messages.firstIndex(where: { $0.id == bid }) else { return }
+        messages[i].nhsTitle = v.nhsSourceTitle
+        messages[i].nhsURL = v.nhsSourceURL
     }
 
     /// New user turn: the next assistant text starts a fresh single bubble.
