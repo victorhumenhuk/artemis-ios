@@ -1284,10 +1284,14 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
         engage()   // she is speaking
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !isFinal {
-            // LIVE caption: her words build, word by word, in the interim bubble (a
-            // right-aligned bubble with a typing cursor) AS she speaks. This is the
-            // visible "live transcription". It commits to a real bubble on the final.
-            interim = clean
+            // Only show the live interim caption when the on-device captioner is the
+            // source (true word-by-word). The realtime transcript arrives post-turn,
+            // so showing it as an interim just made a stale duplicate dashed bubble
+            // next to the committed message. With on-device off, skip the interim and
+            // let the final commit a single clean bubble.
+            if OpenAIRealtimeClient.useOnDeviceCaption {
+                interim = clean
+            }
             if stateMachine.state != .silentTyping { stateMachine.enterListening() }
             return
         }
