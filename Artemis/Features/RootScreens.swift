@@ -61,7 +61,8 @@ struct ArtemisRootScreens: View {
                 VerdictSheetView(result: v, service: engine.verdictService,
                                  onClose: { engine.closeSheet() },
                                  onAdvocacy: { engine.buildAdvocacy() },
-                                 onCall: { engine.callUnit() })
+                                 onCall: { engine.callUnit() },
+                                 onMaps: { engine.openInMaps() })
             }
         case .advocacy:
             if let a = engine.advocacy {

@@ -503,7 +503,7 @@ final class ConversationEngine: NSObject {
         _ = store.addCheckin(CheckinLog(physicalSignals: [], emotionalSignals: [line], concerns: [],
             themes: ["mood"], moodScore: score, reflectionSummary: "", flagsForFollowup: [],
             summaryLine: "Mood logged, \(line.lowercased())."))
-        appendArtemis("Logged your mood as \(line.lowercased()). I'll keep an eye on how it changes.")
+        confirmAndSpeak("Logged your mood as \(line.lowercased()). I'll keep an eye on how it changes.")
         Haptics.tap()
     }
 
@@ -513,7 +513,7 @@ final class ConversationEngine: NSObject {
         _ = store.addCheckin(CheckinLog(physicalSignals: [s], emotionalSignals: [], concerns: [],
             themes: [s.lowercased()], moodScore: 3, reflectionSummary: "", flagsForFollowup: [],
             summaryLine: "Symptom logged, \(s)."))
-        appendArtemis("Noted, \(s). If it gets worse or worries you, tell me and we can check it against NHS guidance.")
+        confirmAndSpeak("Noted, \(s). If it gets worse or worries you, tell me and we can check it against NHS guidance.")
         Haptics.tap()
     }
 
@@ -531,7 +531,7 @@ final class ConversationEngine: NSObject {
                 recommendedAction: "Please contact your maternity unit now, day or night. Do not wait.",
                 routeTo: .maternityTriage), escalate: true)
         } else {
-            appendArtemis("Logged \(count) movements. That's reassuring, keep counting daily and tell me if they slow down.")
+            confirmAndSpeak("Logged \(count) movements. That's reassuring, keep counting daily and tell me if they slow down.")
         }
         Haptics.tap()
     }
@@ -577,7 +577,7 @@ final class ConversationEngine: NSObject {
                 routeTo: .maternityTriage), escalate: true)
             return
         }
-        appendArtemis("Logged your check-in: \(parts.isEmpty ? "all done" : parts.joined(separator: ", ")). I'll keep an eye on how things change.")
+        confirmAndSpeak("Logged your check-in: \(parts.isEmpty ? "all done" : parts.joined(separator: ", ")). I'll keep an eye on how things change.")
         Haptics.tap()
     }
 
@@ -755,7 +755,10 @@ final class ConversationEngine: NSObject {
         let lang = store.profile()?.language ?? "English"
         Task { @MainActor in
             if let lines = await AppointmentPrepClient.generate(context: context, language: lang) {
+                ArtemisLog.info("Advocacy: AI script applied (\(lines.count) lines).")
                 advocacy = AdvocacyScript(title: templated.title, generated: templated.generated, body: lines)
+            } else {
+                ArtemisLog.warn("Advocacy: AI summary returned nil, keeping templated script.")
             }
         }
     }
@@ -798,6 +801,18 @@ final class ConversationEngine: NSObject {
         let phone = verdictUnit?.phone ?? verdictService?.phone
         guard let phone, let url = URL(string: "tel://" + phone.filter { $0.isNumber }) else { return }
         Haptics.action()
+        UIApplication.shared.open(url)
+    }
+
+    /// Open the unit in Apple Maps, by address if we have it, otherwise by name +
+    /// coordinates, so she can get directions straight there.
+    func openInMaps() {
+        let name = verdictUnit?.name ?? verdictService?.name ?? "Maternity unit"
+        let address = verdictUnit?.address ?? verdictService?.address
+        let query = [name, address].compactMap { $0 }.joined(separator: ", ")
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name
+        guard let url = URL(string: "http://maps.apple.com/?q=\(encoded)") else { return }
+        Haptics.tap()
         UIApplication.shared.open(url)
     }
 
@@ -973,6 +988,12 @@ final class ConversationEngine: NSObject {
         beginAssistantTurn()   // her message → the reply starts a fresh single bubble
         messages.append(ChatMessage(role: .her, text: text, imageData: imageData))
         store.addChatTurn(role: "her", text: text, imageData: imageData)
+    }
+    /// Append a confirmation AND, unless she is on silent, say it aloud in Artemis's
+    /// voice, so logging her mood / BP / kicks / check-in gives warm spoken feedback.
+    private func confirmAndSpeak(_ text: String) {
+        appendArtemis(text)
+        if !stateMachine.isSilent { voiceClient?.speak(text) }
     }
     private func appendArtemis(_ text: String) {
         let clean = text.dashStripped

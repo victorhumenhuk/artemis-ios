@@ -55,16 +55,12 @@ final class LiveTranscriber {
         }
         self.recognizer = recognizer
 
-        // Install the tap + start the engine ONCE.
+        // Install the tap + start the engine ONCE. We tap the raw input (voice
+        // processing here broke the live caption on device). Echo is handled at the
+        // WebRTC layer instead: the mic is muted while Artemis speaks AND the model is
+        // told not to let detected speech interrupt its reply, so her own voice can
+        // never feed back and make her answer repeatedly.
         let input = audioEngine.inputNode
-        // CRITICAL: enable voice processing (acoustic echo cancellation + noise
-        // suppression) on this input. Without it, tapping the RAW mic alongside
-        // WebRTC disabled iOS's echo cancellation, so the speaker playing Artemis's
-        // voice fed straight back into the mic, was heard as the user speaking, and
-        // made her reply over and over (the "7 answers by voice" bug). With it, this
-        // engine shares the same echo-cancelled input WebRTC uses.
-        do { try input.setVoiceProcessingEnabled(true) }
-        catch { ArtemisLog.warn("LIVECAP: voice processing unavailable (\(error)); continuing") }
         let format = input.outputFormat(forBus: 0)
         ArtemisLog.info("LIVECAP: input format sr=\(format.sampleRate) ch=\(format.channelCount)")
         guard format.channelCount > 0, format.sampleRate > 0 else {
@@ -97,10 +93,12 @@ final class LiveTranscriber {
     }
 
     private func handleConfigChange() {
+        // Only restart the engine if the route change stopped it; never tear down the
+        // caption here (that was making the live transcription vanish mid-session).
         guard isRunning, keepRunning, !audioEngine.isRunning else { return }
         audioEngine.prepare()
         do { try audioEngine.start(); ArtemisLog.info("LIVECAP: restarted after audio config change") }
-        catch { ArtemisLog.warn("LIVECAP: restart after config change failed, stopping caption \(error)"); stop() }
+        catch { ArtemisLog.warn("LIVECAP: restart after config change failed \(error)") }
     }
 
     private func startTask() {

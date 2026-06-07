@@ -117,6 +117,13 @@ struct RootView: View {
             engine.interim = "I have a really bad headache and my vision has gone blurry"
             return
         }
+        // Advocacy render test: build it WITHOUT a voice connection so the AI summary
+        // is visible without the mic permission prompt covering it.
+        if demo == "advocacy" {
+            engine.store.seedDemoDataIfEmpty()
+            engine.buildAdvocacy()
+            return
+        }
         await engine.startSession()
 
         // Proof demo: a typed turn to generate response events, then the console.

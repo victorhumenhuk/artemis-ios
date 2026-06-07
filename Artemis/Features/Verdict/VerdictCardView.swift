@@ -15,6 +15,7 @@ struct VerdictSheetView: View {
     var onClose: () -> Void
     var onAdvocacy: () -> Void
     var onCall: () -> Void
+    var onMaps: () -> Void = {}
     @Environment(\.palette) private var p
     @State private var shown = false   // drives the staggered reveal
 
@@ -116,8 +117,19 @@ struct VerdictSheetView: View {
     }
 
     private func callBlock(_ service: NearestService) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             PillButton(title: "Call \(service.name)", tone: tierTone, icon: "phone", height: 60, action: onCall)
+            Button(action: onMaps) {
+                HStack(spacing: 8) {
+                    Icon(name: "location", size: 17)
+                    Text("Open in Maps").font(ArtemisFont.sans(15.5, .semibold))
+                }
+                .foregroundStyle(p.lilac700)
+                .frame(maxWidth: .infinity).frame(height: 46)
+                .background(p.lilac50, in: Capsule())
+                .overlay(Capsule().stroke(p.lilac300, lineWidth: 1.5))
+            }
+            .buttonStyle(PressButtonStyle())
             if let address = service.address, !address.isEmpty {
                 Text(address)
                     .font(ArtemisFont.sans(13, .medium)).foregroundStyle(p.ink)

@@ -54,6 +54,7 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     private var lastSentModelSpeaking: Bool?
     private var baseMuted = false          // the engine's intended mute state
     private var modelSpeakingNow = false   // half-duplex: WebRTC mic muted while Artemis speaks
+    private var unmuteWork: DispatchWorkItem?   // delayed un-mute (echo tail guard)
 
     // MARK: connect
 
@@ -90,9 +91,11 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
             // utterance into two turns (which caused the duplicate "...twice" bubble
             // and a double reply). One natural pause stays one turn.
             // Higher threshold + a touch longer silence, so background noise and the
-            // loudspeaker echoing Artemis's own voice do NOT trip the VAD and make her
-            // "keep talking when no one is speaking". prefixPadding keeps her first words.
-            session.audio.input.turnDetection = .serverVad(prefixPaddingMs: 300, silenceDurationMs: 1000, threshold: 0.62)
+            // loudspeaker echoing Artemis's own voice do NOT trip the VAD. interruptResponse
+            // false means detected speech (including her own voice echoing from the
+            // speaker) can NOT cut off and restart her reply, which is what made her
+            // answer over and over. prefixPadding keeps her first words.
+            session.audio.input.turnDetection = .serverVad(createResponse: true, interruptResponse: false, prefixPaddingMs: 300, silenceDurationMs: 1000, threshold: 0.62)
             session.tools = OpenAIRealtimeClient.makeTools()
             session.toolChoice = .auto
         }
@@ -191,8 +194,12 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         try convo.send(from: .user, text: text)
     }
 
-    /// No-op: while online the model speaks its own audio. We never synthesise on device.
-    func speak(_ text: String) {}
+    /// Say a short app-authored line (e.g. a logging confirmation) in Artemis's own
+    /// voice, plainly and once. send(from:.system) triggers exactly one spoken response.
+    func speak(_ text: String) {
+        guard isConnected, let convo = conversation else { return }
+        try? convo.send(from: .system, text: "Now say this to her out loud, warmly and once, and add nothing else: \"\(text)\"")
+    }
     func stopSpeaking() {}
 
     func interrupt() {
@@ -229,7 +236,19 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // VAD, and make her "keep talking" / reply twice. No engine cycling = no crash.
         if modelSpeaking != modelSpeakingNow {
             modelSpeakingNow = modelSpeaking
-            conversation?.muted = baseMuted || modelSpeaking
+            if modelSpeaking {
+                unmuteWork?.cancel(); unmuteWork = nil
+                conversation?.muted = true                       // mute instantly as Artemis starts
+            } else {
+                // Keep the mic muted for a short TAIL after she stops, so the speaker's
+                // echo tail dies before the mic reopens and can re-trigger a reply.
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.conversation?.muted = self.baseMuted
+                }
+                unmuteWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
+            }
         }
         liveTranscriber.setPaused(modelSpeaking)
         if st != lastSentConnState {
