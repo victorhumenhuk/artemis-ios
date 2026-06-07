@@ -21,6 +21,7 @@ final class LiveTranscriber {
     private var tapInstalled = false
     private var keepRunning = false
     private(set) var isRunning = false
+    private var configObserver: NSObjectProtocol?
 
     private var accumulated = ""      // finalised sub-utterances in the CURRENT turn
     private var currentPartial = ""   // live text of the in-flight sub-utterance
@@ -28,15 +29,12 @@ final class LiveTranscriber {
     /// own voice echoing from the speaker is never transcribed as if it were hers.
     nonisolated(unsafe) var paused = false
 
-    /// Pause/resume the caption feed. On RESUME (after Artemis finishes speaking),
-    /// guarantee a live recognition task exists, because the previous task may have
-    /// finalised during the pause. Without this, her first word of the next turn is
-    /// silently dropped while a new task spins up (the warm-up gap).
+    /// Pause/resume the caption feed. Flag-only and side-effect-free, so toggling it
+    /// from the realtime poll can never spin up a recognition task at a fragile moment
+    /// (e.g. as the audio route changes for Artemis's voice). The existing recogniser
+    /// task stays alive across the pause, so her next words are still captured.
     func setPaused(_ p: Bool) {
-        let wasPaused = paused
         paused = p
-        guard wasPaused, !p, isRunning, request == nil else { return }
-        startTask()   // recogniser is warm and ready before her first buffer arrives
     }
 
     /// (fullText, isFinalForThisTurn). Same turn keeps one bubble; endTurn closes it.
@@ -80,7 +78,21 @@ final class LiveTranscriber {
         keepRunning = true
         isRunning = true
         accumulated = ""; currentPartial = ""
+        // CRASH-SAFE: when the audio route/format changes (e.g. the speaker engages
+        // for Artemis's voice while WebRTC is live), AVAudioEngine stops and a stale
+        // tap would crash. Restart the engine cleanly, or bail without crashing.
+        configObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: audioEngine, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.handleConfigChange() }
+        }
         startTask()
+    }
+
+    private func handleConfigChange() {
+        guard isRunning, keepRunning, !audioEngine.isRunning else { return }
+        audioEngine.prepare()
+        do { try audioEngine.start(); ArtemisLog.info("LIVECAP: restarted after audio config change") }
+        catch { ArtemisLog.warn("LIVECAP: restart after config change failed, stopping caption \(error)"); stop() }
     }
 
     private func startTask() {
@@ -144,6 +156,7 @@ final class LiveTranscriber {
 
     func stop() {
         keepRunning = false
+        if let o = configObserver { NotificationCenter.default.removeObserver(o); configObserver = nil }
         guard isRunning else { return }
         isRunning = false
         request?.endAudio()
