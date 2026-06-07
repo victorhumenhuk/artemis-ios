@@ -131,6 +131,7 @@ final class ConversationEngine: NSObject {
     func returnToRest() {
         guard sheet == .none, activeChip == nil,
               stateMachine.state != .responding, stateMachine.state != .thinking else { bumpIdle(); return }
+        interim = ""   // never leave a stale live caption behind when we settle to rest
         withAnimation(.easeInOut(duration: 0.7)) {
             sessionEngaged = false
             view = .home
