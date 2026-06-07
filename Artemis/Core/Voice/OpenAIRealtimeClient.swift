@@ -334,20 +334,35 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     }
 
     private var createResponseWork: DispatchWorkItem?
+    private var createResponseRetries = 0
 
     private func runTool(_ call: Item.FunctionCall) async {
         ArtemisLog.info("Realtime: tool call \(call.name)")
         let output = await delegate?.voiceClient(self, requestsTool: call.name, callId: call.callId, argumentsJSON: call.arguments) ?? "{}"
         try? conversation?.send(result: .init(id: String(UUID().uuidString.prefix(32)), callId: call.callId, output: output))
-        // Debounce the follow-up response: when the model calls SEVERAL tools in one
-        // turn (e.g. NHS lookup + assess), each tool result must NOT fire its own
-        // createResponse, or the second collides with the first
-        // ("conversation_already_has_active_response") and the whole turn breaks. We
-        // send exactly ONE createResponse after the last tool of the batch settles.
+        scheduleCreateResponse()
+    }
+
+    /// Ask the model to continue after tool results, but ONLY once the current
+    /// response is finished. When the model speaks a preamble ("let's keep this
+    /// simple and safe") and then calls tools, the follow-up createResponse used to
+    /// collide with that still-active response ("conversation_already_has_active_
+    /// response"), so the real answer never arrived. We wait for the model to stop
+    /// speaking first (capped), and debounce so several tools in one turn send ONE.
+    private func scheduleCreateResponse() {
         createResponseWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in try? self?.conversation?.send(event: .createResponse()) }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if self.conversation?.isModelSpeaking == true, self.createResponseRetries < 12 {
+                self.createResponseRetries += 1
+                self.scheduleCreateResponse()      // still mid-utterance; wait for it to finish
+            } else {
+                self.createResponseRetries = 0
+                try? self.conversation?.send(event: .createResponse())
+            }
+        }
         createResponseWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
 
     // MARK: tools (mirror Tools.swift, expressed in the SDK schema DSL)
