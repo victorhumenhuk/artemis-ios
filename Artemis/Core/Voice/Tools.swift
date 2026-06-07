@@ -312,7 +312,11 @@ final class ToolDispatcher {
         return obj
     }
     private func encode(_ dict: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+        // Sanitise any non-finite Double (NaN/inf): JSONSerialization throws an
+        // UNCATCHABLE NSException on those, which would crash the app.
+        var safe = dict
+        for (k, v) in dict { if let d = v as? Double, !d.isFinite { safe[k] = 0 } }
+        guard let data = try? JSONSerialization.data(withJSONObject: safe),
               let s = String(data: data, encoding: .utf8) else { return "{}" }
         return s
     }

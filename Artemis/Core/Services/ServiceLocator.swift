@@ -140,41 +140,49 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         let fix: CLLocationCoordinate2D? = await withCheckedContinuation { (cont: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
             self.continuation = cont
             manager.requestLocation()
+            // Safety: never hang the nearest-unit flow if CoreLocation never calls back.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                self.finishLocation(nil)
+            }
         }
         return fix
         #endif
     }
 
-    // CLLocationManager delivers callbacks on the thread it was created on (main,
-    // since this singleton is built on the main actor), so assumeIsolated is safe.
+    // CRASH FIX: CLLocationManager can deliver these callbacks on a NON-main thread
+    // on a real device. MainActor.assumeIsolated TRAPS (SIGTRAP) when that happens,
+    // which crashed the app on "find my nearest clinic" (the simulator never hit
+    // this because it returns a fixed coordinate without a continuation). We now hop
+    // to the main actor with a Task (never traps) and resume the continuation EXACTLY
+    // once via finishLocation (guards against CoreLocation firing more than once).
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        MainActor.assumeIsolated {
-            let coord = locations.last?.coordinate
-            if let coord { lastKnown = coord; reverseGeocode(coord) }
-            continuation?.resume(returning: coord)
-            continuation = nil
+        let coord = locations.last?.coordinate
+        Task { @MainActor in
+            if let coord { self.lastKnown = coord; self.reverseGeocode(coord) }
+            self.finishLocation(coord)
         }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        MainActor.assumeIsolated {
-            continuation?.resume(returning: nil)
-            continuation = nil
-        }
+        Task { @MainActor in self.finishLocation(nil) }
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        // Safe place to read authorizationStatus, it is already resolved here. We
-        // cache it so views never trigger a synchronous (blocking) read.
         let status = manager.authorizationStatus
-        MainActor.assumeIsolated {
-            authStatus = status
+        Task { @MainActor in
+            self.authStatus = status
             if status == .authorizedWhenInUse || status == .authorizedAlways {
-                if continuation != nil { manager.requestLocation() }
+                if self.continuation != nil { self.manager.requestLocation() }
             } else if status == .denied || status == .restricted {
-                continuation?.resume(returning: nil)
-                continuation = nil
+                self.finishLocation(nil)
             }
         }
+    }
+
+    /// Resume the pending location continuation at most once.
+    @MainActor private func finishLocation(_ coord: CLLocationCoordinate2D?) {
+        continuation?.resume(returning: coord)
+        continuation = nil
     }
 }
