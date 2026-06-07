@@ -61,7 +61,10 @@ final class ServiceLocator {
 final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = LocationProvider()
     private let manager = CLLocationManager()
-    private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+    // A LIST, not one slot: connect-prefetch and find_nearest can ask for location
+    // at the same time. With a single slot the second overwrote the first, leaking it
+    // (and hanging that caller). All waiters resume together when the fix arrives.
+    private var continuations: [CheckedContinuation<CLLocationCoordinate2D?, Never>] = []
 
     @Published private(set) var lastKnown: CLLocationCoordinate2D?
     /// Reverse-geocoded place name (town/city) for the model instructions.
@@ -138,12 +141,15 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
             return nil
         }
         let fix: CLLocationCoordinate2D? = await withCheckedContinuation { (cont: CheckedContinuation<CLLocationCoordinate2D?, Never>) in
-            self.continuation = cont
-            manager.requestLocation()
-            // Safety: never hang the nearest-unit flow if CoreLocation never calls back.
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
-                self.finishLocation(nil)
+            self.continuations.append(cont)
+            // Only the FIRST waiter starts the request + the safety timeout; the rest
+            // just join the queue and resume together when the fix (or timeout) lands.
+            if self.continuations.count == 1 {
+                self.manager.requestLocation()
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 5_000_000_000)
+                    self.finishLocation(nil)
+                }
             }
         }
         return fix
@@ -173,16 +179,17 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
         Task { @MainActor in
             self.authStatus = status
             if status == .authorizedWhenInUse || status == .authorizedAlways {
-                if self.continuation != nil { self.manager.requestLocation() }
+                if !self.continuations.isEmpty { self.manager.requestLocation() }
             } else if status == .denied || status == .restricted {
                 self.finishLocation(nil)
             }
         }
     }
 
-    /// Resume the pending location continuation at most once.
+    /// Resume EVERY pending location waiter exactly once, then clear the queue.
     @MainActor private func finishLocation(_ coord: CLLocationCoordinate2D?) {
-        continuation?.resume(returning: coord)
-        continuation = nil
+        let pending = continuations
+        continuations = []
+        for c in pending { c.resume(returning: coord) }
     }
 }
