@@ -207,9 +207,12 @@ export default {
             messages: [{ role: "system", content: system }, { role: "user", content: context }],
           }),
         });
-        const data: any = await resp.json();
+        const data: any = await resp.json().catch(() => ({}));
+        // On an OpenAI error, return empty text so the app falls back gracefully
+        // rather than seeing a raw upstream error status.
+        if (!resp.ok) return json({ text: "" });
         const text = data?.choices?.[0]?.message?.content ?? "";
-        return json({ text }, resp.status);
+        return json({ text });
       } catch (e) {
         return json({ error: "summary failed", detail: String(e) }, 502);
       }
@@ -266,9 +269,12 @@ export default {
             ],
           }),
         });
-        const data: any = await resp.json();
+        const data: any = await resp.json().catch(() => ({}));
+        // On an OpenAI error, return empty text so the app falls back gracefully
+        // rather than seeing a raw upstream error status.
+        if (!resp.ok) return json({ text: "" });
         const text = data?.choices?.[0]?.message?.content ?? "";
-        return json({ text }, resp.status);
+        return json({ text });
       } catch (e) {
         return json({ error: "vision failed", detail: String(e) }, 502);
       }

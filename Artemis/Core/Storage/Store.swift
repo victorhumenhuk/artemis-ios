@@ -222,12 +222,21 @@ final class Store {
         do {
             return try ModelContainer(for: schema, configurations: [config])
         } catch {
-            // Last-resort in-memory container so the app always launches.
-            let mem = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+            // A schema change can make the old store unreadable. Rather than silently
+            // dropping to in-memory and losing the persistent store on every launch,
+            // reset the on-disk store once and retry, so it keeps working afterwards.
+            ArtemisLog.error("Store: persistent container failed (\(error)); resetting the on-disk store and retrying.")
+            try? FileManager.default.removeItem(at: config.url)
             do {
-                return try ModelContainer(for: schema, configurations: [mem])
+                return try ModelContainer(for: schema, configurations: [config])
             } catch {
-                fatalError("Artemis could not create a data store (even in memory): \(error)")
+                ArtemisLog.error("Store: persistent reset also failed (\(error)); falling back to in-memory.")
+                let mem = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
+                do {
+                    return try ModelContainer(for: schema, configurations: [mem])
+                } catch {
+                    fatalError("Artemis could not create a data store (even in memory): \(error)")
+                }
             }
         }
     }

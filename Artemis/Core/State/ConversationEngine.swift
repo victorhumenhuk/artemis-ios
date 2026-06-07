@@ -157,7 +157,7 @@ final class ConversationEngine: NSObject {
     func applyProfileChange(reconnect: Bool = true, _ change: (UserProfile) -> Void) {
         guard let p = store.profile() else { return }
         change(p)
-        try? store.context.save()
+        do { try store.context.save() } catch { ArtemisLog.error("Profile save failed: \(error)") }
         profileRev += 1
         if reconnect { reconnectVoice() }
     }
@@ -275,7 +275,7 @@ final class ConversationEngine: NSObject {
                 awaitingGreeting = true
                 voiceClient?.setMuted(true)
                 // Safety: never leave the mic muted if the greeting never lands.
-                Task { [weak self] in
+                Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 6_000_000_000)
                     guard let self, self.awaitingGreeting else { return }
                     self.awaitingGreeting = false
@@ -1005,6 +1005,7 @@ final class ConversationEngine: NSObject {
         turnBubbleID = msg.id
         messages.append(msg)
         attachNHSSource()
+        persistedBubbleIDs.insert(msg.id)   // so a realtime upsert never re-persists this bubble
         store.addChatTurn(role: "artemis", text: clean)
     }
 
@@ -1030,8 +1031,9 @@ enum VisionClient {
         req.timeoutInterval = 30
         req.httpBody = try? JSONSerialization.data(withJSONObject: ["image": dataURL, "prompt": prompt])
         do {
-            let (data, _) = try await URLSession.shared.data(for: req)
-            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let text = (obj["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !text.isEmpty {
                 return text
@@ -1365,6 +1367,10 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
     private func attachNHSSource() {
         guard let v = verdict, NHSSourceGuard.isValid(title: v.nhsSourceTitle, url: v.nhsSourceURL),
               let bid = turnBubbleID, let i = messages.firstIndex(where: { $0.id == bid }) else { return }
+        // A logging confirmation ("Logged your mood…") is not a clinical reply, so it
+        // must never inherit a stale verdict's NHS pill from a previous turn.
+        let low = messages[i].text.lowercased()
+        if ["logged", "noted,"].contains(where: { low.hasPrefix($0) }) { return }
         messages[i].nhsTitle = v.nhsSourceTitle
         messages[i].nhsURL = v.nhsSourceURL
     }

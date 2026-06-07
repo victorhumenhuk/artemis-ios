@@ -194,7 +194,7 @@ struct ConversationView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 14) {
-                        ForEach(visibleMessages) { msg in
+                        ForEach(visibleMessages, id: \.id) { msg in
                             BubbleView(message: msg,
                                        canHear: engine.isSilent && msg.role == .artemis && msg.id == engine.messages.last?.id,
                                        hasVerdict: msg.role == .artemis && engine.verdict != nil && msg.id == engine.messages.last?.id,

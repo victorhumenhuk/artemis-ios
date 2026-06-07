@@ -247,7 +247,7 @@ enum HeuristicOrganizer {
         case 0: return ""
         case 1: return l[0]
         case 2: return "\(l[0]) and \(l[1])"
-        default: return l.dropLast().joined(separator: ", ") + " and " + l.last!
+        default: return l.dropLast().joined(separator: ", ") + " and " + (l.last ?? "")
         }
     }
 }
