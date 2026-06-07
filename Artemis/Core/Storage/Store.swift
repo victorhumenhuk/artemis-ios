@@ -217,6 +217,12 @@ final class Store {
     }
 
     static func makeContainer() -> ModelContainer {
+        // On a fresh install the Application Support directory (SwiftData's default
+        // store location) may not exist yet, which made CoreData fail + spam errors
+        // before it recovered. Create it up front so the store opens cleanly.
+        if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        }
         let schema = Schema([UserProfile.self, CheckinEntry.self, SymptomEntry.self, BPReading.self, KickSession.self, ChatTurn.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {

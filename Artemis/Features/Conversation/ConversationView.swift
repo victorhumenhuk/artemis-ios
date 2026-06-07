@@ -262,7 +262,10 @@ struct ConversationView: View {
                     .lineLimit(1...4)
                     .submitLabel(.send)
                     .onChange(of: inputFocused) { _, focused in
+                        // Tapping into the text box pauses the mic so it never listens
+                        // while she types; leaving it (without sending) resumes listening.
                         if focused { engine.enterSilentTyping() }
+                        else { engine.exitSilentTyping() }
                     }
                     .onSubmit(send)
 

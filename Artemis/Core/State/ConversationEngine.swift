@@ -733,6 +733,16 @@ final class ConversationEngine: NSObject {
         voiceClient?.stopSpeaking()
     }
 
+    /// She left the text box without sending: resume listening so the mic works
+    /// again. Only acts while we are in the typing state, so it never overrides a
+    /// send that is already thinking/responding.
+    func exitSilentTyping() {
+        guard stateMachine.state == .silentTyping, !micPaused, !stateMachine.isSilent, usingRealtime else { return }
+        stateMachine.enterListening()
+        voiceClient?.setMuted(false)
+        voiceClient?.startListening()
+    }
+
     func setSilentLocked(_ on: Bool) {
         stateMachine.lockSilent(on)
         voiceClient?.setMuted(stateMachine.micMuted)
@@ -1455,8 +1465,11 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
                 voiceClient?.setMuted(true)
                 return
             }
-            if stateMachine.state == .listening, !client.handlesReasoning {
-                voiceClient?.startListening()
+            // Settle back to listening with the mic LIVE, so a typed turn (which had
+            // muted the mic) does not leave it stuck off afterwards.
+            if stateMachine.state == .listening, !micPaused, !stateMachine.isSilent {
+                voiceClient?.setMuted(false)
+                if !client.handlesReasoning { voiceClient?.startListening() }
             }
         }
     }
