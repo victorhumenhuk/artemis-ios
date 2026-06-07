@@ -61,7 +61,7 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
 
     func connect() async throws {
         delegate?.voiceClient(self, didChangeConnectionState: "connecting")
-        ArtemisLog.info("Realtime: connecting…")
+        ArtemisLog.info("Realtime: connecting… [build LOCFIX-OK]")
 
         // playAndRecord + defaultToSpeaker, activated, so the model's remote audio
         // track is AUDIBLE (output works on the simulator even though mic capture
