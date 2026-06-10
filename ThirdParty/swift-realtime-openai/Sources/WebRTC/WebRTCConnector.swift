@@ -31,10 +31,27 @@ import FoundationNetworking
 
 	private let stream: AsyncThrowingStream<ServerEvent, Error>.Continuation
 
+	// PATCH (Artemis): the audio processing module holds its delegates WEAKLY, so
+	// the capture tap must be retained statically alongside the factory.
+	static let captureTap = CaptureAudioTap()
+
 	private static let factory: LKRTCPeerConnectionFactory = {
 		LKRTCInitializeSSL()
 
-		return LKRTCPeerConnectionFactory()
+		// PATCH (Artemis): inject an audio processing module whose capture
+		// post-processing delegate hands us the echo-cancelled mic audio, so the
+		// app can run a live on-device caption WITHOUT opening a second audio
+		// client on the microphone (renderers on a local track are never fed).
+		let apm = LKRTCDefaultAudioProcessingModule(
+			config: nil,
+			capturePostProcessingDelegate: captureTap,
+			renderPreProcessingDelegate: nil)
+		return LKRTCPeerConnectionFactory(
+			audioDeviceModuleType: .platformDefault,
+			bypassVoiceProcessing: false,
+			encoderFactory: nil,
+			decoderFactory: nil,
+			audioProcessingModule: apm)
 	}()
 
 	private let encoder: JSONEncoder = {
@@ -49,10 +66,10 @@ import FoundationNetworking
 		return decoder
 	}()
 
-	// PATCH (Artemis): tap the LOCAL mic audio WebRTC captures so an on-device
-	// recogniser can show her words live (the exact audio the model hears).
+	// PATCH (Artemis): tap the mic audio WebRTC captures (echo-cancelled, via the
+	// APM capture post-processing hook) so an on-device recogniser can show her
+	// words live, on the exact audio the model hears.
 	public nonisolated(unsafe) var onLocalAudioBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
-	private let localAudioTap = LocalAudioTap()
 
 	private init(connection: LKRTCPeerConnection, audioTrack: LKRTCAudioTrack, dataChannel: LKRTCDataChannel) {
 		self.connection = connection
@@ -65,8 +82,7 @@ import FoundationNetworking
 		connection.delegate = self
 		dataChannel.delegate = self
 
-		localAudioTap.onBuffer = { [weak self] buf in self?.onLocalAudioBuffer?(buf) }
-		audioTrack.add(localAudioTap)
+		Self.captureTap.onBuffer = { [weak self] buf in self?.onLocalAudioBuffer?(buf) }
 	}
 
 	deinit {
@@ -220,12 +236,36 @@ public enum RealtimeRawTap {
 	public nonisolated(unsafe) static var decodeFailure: (@Sendable (String, Error) -> Void)?
 }
 
-/// PATCH (Artemis): an audio renderer attached to the LOCAL mic track. WebRTC
-/// delivers the captured PCM buffers here, which we forward so the app can run
-/// live on-device transcription on the same audio the model hears.
-final class LocalAudioTap: NSObject, LKRTCAudioRenderer, @unchecked Sendable {
+/// PATCH (Artemis): the capture-path audio tap. Renderers attached to a LOCAL
+/// track are never fed by WebRTC, so we hook the audio processing module's
+/// capture POST-processing delegate instead: the echo-cancelled mic audio,
+/// exactly what is sent to the model, delivered on the audio thread. The
+/// LKRTCAudioBuffer is only valid inside the callback, so each one is copied
+/// into an AVAudioPCMBuffer before forwarding for live transcription.
+final class CaptureAudioTap: NSObject, LKRTCAudioCustomProcessingDelegate, @unchecked Sendable {
 	nonisolated(unsafe) var onBuffer: (@Sendable (AVAudioPCMBuffer) -> Void)?
-	func render(pcmBuffer: AVAudioPCMBuffer) { onBuffer?(pcmBuffer) }
+	nonisolated(unsafe) private var format: AVAudioFormat?
+
+	nonisolated(unsafe) private var loggedFirst = false
+
+	func audioProcessingInitialize(sampleRate sampleRateHz: Int, channels: Int) {
+		format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRateHz), channels: 1, interleaved: false)
+	}
+
+	func audioProcessingProcess(audioBuffer: LKRTCAudioBuffer) {
+		if !loggedFirst { loggedFirst = true; NSLog("CAPTAP: first mic buffer (frames=%d ch=%d) — live caption feed is live", audioBuffer.frames, audioBuffer.channels) }
+		guard let onBuffer, let format, audioBuffer.channels > 0, audioBuffer.frames > 0 else { return }
+		let frames = AVAudioFrameCount(audioBuffer.frames)
+		guard let pcm = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames),
+		      let dst = pcm.floatChannelData?[0] else { return }
+		memcpy(dst, audioBuffer.rawBuffer(forChannel: 0), Int(frames) * MemoryLayout<Float>.size)
+		pcm.frameLength = frames
+		onBuffer(pcm)
+	}
+
+	func audioProcessingRelease() {
+		format = nil
+	}
 }
 
 extension WebRTCConnector: LKRTCDataChannelDelegate {

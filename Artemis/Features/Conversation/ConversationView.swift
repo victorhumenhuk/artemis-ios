@@ -614,6 +614,7 @@ struct InterimBubble: View {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) { cursorOn = false }
         }
+        .onDisappear { cursorOn = true }   // stop the repeat-forever pulse when removed
     }
 }
 

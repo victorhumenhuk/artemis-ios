@@ -1284,11 +1284,12 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
         engage()   // she is speaking
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !isFinal {
-            // No interim bubble: the on-device live captioner is disabled, and the
-            // realtime transcript arrives post-turn, so an interim only created a
-            // stale duplicate dashed bubble next to the committed message. Her words
-            // commit straight to a single clean bubble on the final.
-            interim = ""
+            // LIVE caption: only the on-device recogniser (fed by WebRTC's own mic
+            // buffers, so there is no audio-device conflict) sends isFinal=false. Her
+            // words build in the interim bubble AS she speaks; the accurate realtime
+            // transcript then commits the real bubble and clears it, so the interim
+            // can never linger next to the committed message.
+            interim = clean
             if stateMachine.state != .silentTyping { stateMachine.enterListening() }
             return
         }

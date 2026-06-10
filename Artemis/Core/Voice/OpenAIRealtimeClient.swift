@@ -17,10 +17,6 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
     weak var delegate: RealtimeVoiceClientDelegate?
     private(set) var isConnected = false
     let handlesReasoning = true     // the model reasons (tools) and speaks audio
-    /// The raw-mic on-device captioner conflicts with WebRTC on device (echo, mic
-    /// starvation, voice cutting out). Off by default; the realtime transcript drives
-    /// her words instead.
-    static let useOnDeviceCaption = false
 
     /// Recent check-in context, set by the engine before connect, so the model
     /// can reason over real logged data (drift observations come from the model).
@@ -160,30 +156,26 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         try? convo.send(from: .system, text: "The app just opened and she can hear you. Greet her warmly in one short sentence as Artemis, then listen.")
     }
 
-    /// Start the on-device live caption so her words appear AS she speaks. The
-    /// realtime API's own transcript arrives only after the turn, so this drives
-    /// the live bubble; if it cannot run, the realtime transcript is the fallback.
+    /// Start the live caption so her words appear AS she speaks, WITHOUT touching
+    /// the microphone: WebRTC stays the only owner, and its local-audio tap feeds
+    /// the echo-cancelled buffers it captures into the on-device recogniser
+    /// (LiveTranscriber passive mode). Division of labour:
+    ///  - on-device PARTIALS drive only the ephemeral interim caption (isFinal=false)
+    ///  - the accurate realtime transcript commits her real bubble (polling path)
+    /// So even if on-device recognition stumbles, the conversation text stays right,
+    /// and there is no second audio engine to fight WebRTC (the old echo/cut-out bug).
     private func startLiveCaption() {
-        // The raw-mic AVAudioEngine captioner fights WebRTC for the microphone on a
-        // real device: it breaks echo cancellation (she replies many times), starves
-        // the mic so the voice cuts out, and itself produces nothing. We rely on the
-        // realtime transcript for her words instead, which is reliable. Flip this to
-        // true only to experiment with the on-device live captioner.
-        guard Self.useOnDeviceCaption else {
-            ArtemisLog.info("LIVECAP: on-device caption disabled; realtime transcript drives her words.")
-            return
-        }
         liveProducedAnything = false
-        conversation?.onLocalAudioBuffer = nil
         liveTranscriber.configure(languageName: preferredLanguage)
         liveTranscriber.onText = { [weak self] text, final in
-            guard let self else { return }
+            guard let self, !final else { return }   // partials only; realtime commits the bubble
             self.liveProducedAnything = true
-            self.delegate?.voiceClient(self, didUpdateUserTranscript: self.liveItemID, text: text, isFinal: final)
-            if final { self.liveCount += 1 }
+            self.delegate?.voiceClient(self, didUpdateUserTranscript: self.liveItemID, text: text, isFinal: false)
         }
-        liveTranscriber.start()
-        ArtemisLog.info("LIVECAP: on-device live caption started (raw mic), running=\(liveTranscriber.isRunning)")
+        liveTranscriber.startPassive()
+        conversation?.onLocalAudioBuffer = { [weak liveTranscriber] buffer in
+            liveTranscriber?.ingest(buffer)
+        }
     }
 
     func disconnect() {
@@ -272,28 +264,22 @@ final class OpenAIRealtimeClient: NSObject, RealtimeVoiceClient {
         // grows (isFinal=false), and commit once when speech stops (isFinal=true),
         // even if the last tick's text was unchanged.
         let speaking = convo.isUserSpeaking
-        // The on-device live caption is the source of HER bubble once it has
-        // produced words, so skip the realtime transcript to avoid a second bubble.
-        // If the on-device capture yields nothing (mic owned by WebRTC), fall back
-        // to the realtime transcript so a bubble still appears.
-        // The on-device caption owns her transcript once it has produced words. If it
-        // yields nothing (silence, or a device where the recogniser is unavailable),
-        // the realtime transcript feeds the SAME live interim caption as a fallback,
-        // so there is always a live transcription and never a duplicate.
-        let liveOwnsBubble = Self.useOnDeviceCaption && liveTranscriber.isRunning && liveProducedAnything
-        // Drive the on-device caption's turn boundary off the realtime VAD: when
-        // she stops, close the bubble so the next words start a fresh one.
+        // Turn boundary for the live captioner: when she stops, reset its
+        // accumulation so the next turn's partials start fresh.
         if liveTranscriber.isRunning, wasUserSpeaking, !speaking { liveTranscriber.endTurn() }
-        if !liveOwnsBubble, let umsg = convo.messages.last(where: { $0.role == .user }) {
+        // The realtime transcript ALWAYS commits her real bubble (isFinal: true), and
+        // ONLY the live captioner's partials feed the interim caption (isFinal: false
+        // from startLiveCaption). Keeping these sources strictly separated is what
+        // prevents the duplicate dashed bubble next to the committed message.
+        if let umsg = convo.messages.last(where: { $0.role == .user }) {
             let user = umsg.content.compactMap { $0.text }.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
             let itemID = "\(umsg.id)"
             if !user.isEmpty {
-                let stoppedNow = wasUserSpeaking && !speaking
-                if user != lastUserText || itemID != lastUserItemID || stoppedNow {
+                if user != lastUserText || itemID != lastUserItemID {
                     lastUserText = user
                     lastUserItemID = itemID
-                    // Forward the item id so the UI keeps her words in ONE live bubble.
-                    delegate?.voiceClient(self, didUpdateUserTranscript: itemID, text: user, isFinal: !speaking)
+                    // Forward the item id so the UI keeps her words in ONE bubble.
+                    delegate?.voiceClient(self, didUpdateUserTranscript: itemID, text: user, isFinal: true)
                 }
             }
         }
