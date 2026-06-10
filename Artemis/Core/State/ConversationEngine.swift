@@ -768,7 +768,7 @@ final class ConversationEngine: NSObject {
         Task { @MainActor in
             if let lines = await AppointmentPrepClient.generate(context: context, language: lang) {
                 ArtemisLog.info("Advocacy: AI script applied (\(lines.count) lines).")
-                advocacy = AdvocacyScript(title: templated.title, generated: templated.generated, body: lines)
+                advocacy = AdvocacyScript(title: templated.title, generated: templated.generated, body: lines, language: lang)
             } else {
                 ArtemisLog.warn("Advocacy: AI summary returned nil, keeping templated script.")
             }
@@ -1299,6 +1299,10 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
         // A bare filler ("hm", "uh", "um") is not a message: don't persist a bubble or
         // start a thinking turn for it, so the thread stays clean.
         if isBackchannel(clean) { return }
+        // While she is typing in silent mode (or has paused the mic), a late realtime
+        // FINAL of earlier speech must not drop a stray "her" bubble or flip us into
+        // thinking — it would collide with her typed turn. Mirror the non-final guard.
+        if stateMachine.state == .silentTyping || micPaused { return }
         if let uuid = userBubbleMap[itemId], let idx = messages.firstIndex(where: { $0.id == uuid }) {
             messages[idx].text = clean
         } else if let last = messages.last, last.role == .her,
@@ -1506,15 +1510,19 @@ extension ConversationEngine: RealtimeVoiceClientDelegate {
         }
         isReconnecting = true
         let delay = min(pow(2.0, Double(reconnectAttempt)), 16)
-        reconnectAttempt += 1
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard isReconnecting else { return }
             if !Reachability.shared.isOnline {
+                // Being offline is NOT a failed attempt — it must not drain the 5-try
+                // budget, or a 30s venue-WiFi drop would burn every attempt and stick
+                // on permanent failure. Keep polling at this interval; the attempt is
+                // only consumed when we actually try to connect (online path below).
                 isReconnecting = false
-                scheduleAutoReconnect()   // retry the same attempt once back online-ish
+                scheduleAutoReconnect()
                 return
             }
+            reconnectAttempt += 1
             ArtemisLog.info("Realtime: auto-reconnecting (attempt \(reconnectAttempt))…")
             reconnectVoice()
             isReconnecting = false

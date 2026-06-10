@@ -9,6 +9,8 @@ struct AdvocacyScript: Equatable {
     var title: String
     var generated: String
     var body: [String]
+    /// Her language name (e.g. "Arabic"), so Read-aloud picks the right TTS voice.
+    var language: String = "English"
 
     var plainText: String {
         body.joined(separator: "\n")
@@ -67,7 +69,8 @@ enum AdvocacyBuilder {
         let f = DateFormatter(); f.dateStyle = .medium
         let generated = recent.isEmpty ? "Generated from your details"
                                        : "Generated from your last \(min(7, recent.count)) days"
-        return AdvocacyScript(title: "For your midwife", generated: generated, body: lines)
+        return AdvocacyScript(title: "For your midwife", generated: generated, body: lines,
+                              language: profile?.language ?? "English")
     }
 
     private static func joinNaturally(_ items: [String]) -> String {

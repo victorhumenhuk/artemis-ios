@@ -181,7 +181,7 @@ struct HistoryView: View {
                         VStack(spacing: 5) {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(k.low ? p.urgent : p.sage300)
-                                .frame(height: max(6, CGFloat(k.count) / 10 * 56))
+                                .frame(height: min(56, max(6, CGFloat(k.count) / 10 * 56)))
                             Text(k.day).font(ArtemisFont.sans(11, .semibold)).foregroundStyle(p.inkMute)
                         }
                         .frame(maxWidth: .infinity)

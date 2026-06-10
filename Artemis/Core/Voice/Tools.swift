@@ -167,9 +167,41 @@ final class ToolDispatcher {
         if let def = entry?.defaultTier { tier = TriageTier.higher(tier, def) }
         // DETERMINISTIC RED-FLAG FLOOR: certain signs ALWAYS escalate, regardless of
         // the model's tier, so a pre-eclampsia or labour sign is never shown routine.
-        let scan = (rawMatched + " " + rawSpoken + " " + ((args["red_flags_detected"] as? [String])?.joined(separator: " ") ?? "")).lowercased()
+        // Scan ONLY the structured signals of what is actually PRESENT — the neutral
+        // matched_condition and the red_flags_detected list — NEVER the free-text
+        // spoken_response. A reassuring reply about a benign symptom educates her by
+        // naming the red-flag version to watch for ("…but if you get sudden swelling
+        // in your face or hands, call your midwife"), and scanning that advice text
+        // wrongly escalated routine symptoms (e.g. mild ankle swelling) to urgent.
+        let scan = (rawMatched + " " + ((args["red_flags_detected"] as? [String])?.joined(separator: " ") ?? "")).lowercased()
         let emergencyFlags = ["about to give birth", "giving birth", "in labour", "waters", "heavy bleeding", "collapse", "seizure", "fitting", "unconscious", "chest pain", "can't breathe", "cannot breathe"]
-        let urgentFlags = ["blurred vision", "blurry vision", "vision has gone", "vision's gone", "severe headache", "bad headache", "pounding headache", "reduced movement", "fewer movement", "not moving", "stopped moving", "swollen", "swelling", "faint", "dizzy", "pre-eclampsia", "preeclampsia"]
+        // CLINICAL PRECISION: the floor escalates on UNAMBIGUOUS red-flag wording
+        // only. Bare "swollen"/"dizzy"/"faint" were forcing benign, NHS-routine
+        // mentions (gradual ankle swelling, postural light-headedness) up to URGENT,
+        // showing an alarming card for normal pregnancy symptoms. These qualified
+        // phrases keep full coverage of the genuine pre-eclampsia / collapse / reduced-
+        // movement signals (so nothing dangerous is under-escalated) without firing on
+        // a mild mention the model has correctly classified as routine.
+        let urgentFlags = [
+            // vision (pre-eclampsia)
+            "blurred vision", "blurry vision", "vision is blurry", "vision's blurry", "vision has gone",
+            "vision's gone", "vision went", "seeing spots", "flashing lights", "spots before", "double vision",
+            "can't see properly", "cant see properly", "lost my vision",
+            // headache (severe)
+            "severe headache", "bad headache", "pounding headache", "terrible headache", "worst headache",
+            // swelling (sudden / face / hands — NOT gradual ankle swelling)
+            "sudden swelling", "swollen face", "swollen hands", "face is swollen", "hands are swollen",
+            "swelling in my face", "swelling in my hands", "puffy face", "puffy hands", "facial swelling",
+            // faint / collapse
+            "feeling faint", "feel faint", "about to faint", "going to faint", "passed out", "blacked out",
+            "fainted", "very dizzy", "really dizzy", "so dizzy", "extremely dizzy", "suddenly dizzy",
+            // reduced fetal movement
+            "reduced movement", "reduced movements", "fewer movement", "fewer movements", "less movement",
+            "not moving", "stopped moving", "hasn't moved", "hasnt moved", "no movement", "baby not moving",
+            "isn't moving", "isnt moving",
+            // named condition
+            "pre-eclampsia", "preeclampsia",
+        ]
         if emergencyFlags.contains(where: { scan.contains($0) }) { tier = .emergency }
         else if urgentFlags.contains(where: { scan.contains($0) }) { tier = TriageTier.higher(tier, .urgent) }
         ArtemisLog.info("Triage: tier=\(tier.rawValue) (model passed \(tierStr)).")

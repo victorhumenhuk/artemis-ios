@@ -272,7 +272,7 @@ struct DetailScreen: View {
                                 Text("\(k.count)").font(ArtemisFont.sans(11, .semibold)).foregroundStyle(p.inkMute)
                                 RoundedRectangle(cornerRadius: 6)
                                     .fill(last && down ? p.emergency : p.sage300)
-                                    .frame(height: max(8, CGFloat(k.count) / 10 * 70))
+                                    .frame(height: min(70, max(8, CGFloat(k.count) / 10 * 70)))
                                 Text(dayInitial(k.date)).font(ArtemisFont.sans(11, .semibold)).foregroundStyle(p.inkMute)
                             }
                             .frame(maxWidth: .infinity)

@@ -28,15 +28,18 @@ enum AppointmentPrepClient {
             if lines.count < 2 {
                 // The model sometimes returns ONE paragraph (no newlines); split it
                 // into sentences so the AI script still renders instead of silently
-                // falling back to the templated one.
+                // falling back to the (English) templated one. Use multilingual
+                // terminators so Arabic (؟), Bengali (।), CJK (。！？) and Latin all
+                // split — the old "split on '. '" dropped non-Latin scripts entirely.
+                let terminators = CharacterSet(charactersIn: ".!?。！？।؟\n")
                 lines = text
-                    .replacingOccurrences(of: "\n", with: " ")
-                    .components(separatedBy: ". ")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .components(separatedBy: terminators)
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                     .filter { $0.count > 2 }
-                    .map { $0.hasSuffix(".") ? $0 : $0 + "." }
             }
-            return lines.count >= 2 ? lines : nil
+            // Accept even a single valid sentence in her language rather than
+            // discarding it and showing the English template.
+            return lines.isEmpty ? nil : lines
         } catch {
             ArtemisLog.info("AppointmentPrep: AI summary unavailable, using templated script.")
             return nil

@@ -26,10 +26,11 @@ final class LiveTranscriber {
     private var recognizer: SFSpeechRecognizer?
     private var task: SFSpeechRecognitionTask?
     private var request: SFSpeechAudioBufferRecognitionRequest?
-    /// Mirror of `request` readable from the audio thread (ingest). Updated only on
-    /// the main actor, read-only off it; worst case a buffer lands on a request that
-    /// just ended, which SFSpeech ignores.
+    /// Mirror of `request` readable from the audio thread (ingest). Guarded by
+    /// requestLock so an audio-thread append() can never overlap the main-actor
+    /// endAudio()/teardown that nils it out (a genuine append‖endAudio data race).
     nonisolated(unsafe) private var activeRequest: SFSpeechAudioBufferRecognitionRequest?
+    private let requestLock = NSLock()
     private var tapInstalled = false
     private var keepRunning = false
     private var passive = false
@@ -88,7 +89,9 @@ final class LiveTranscriber {
             let f = buffer.format
             ArtemisLog.info("LIVECAP: ingest #\(ingestCount) sr=\(f.sampleRate) ch=\(f.channelCount) fmt=\(f.commonFormat.rawValue) frames=\(buffer.frameLength)")
         }
+        requestLock.lock()
         activeRequest?.append(buffer)
+        requestLock.unlock()
     }
 
     func start() {
@@ -154,7 +157,7 @@ final class LiveTranscriber {
         req.shouldReportPartialResults = true
         req.requiresOnDeviceRecognition = false   // best available recogniser, accurate
         request = req
-        activeRequest = req
+        requestLock.lock(); activeRequest = req; requestLock.unlock()
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             guard let self else { return }
             Task { @MainActor in
@@ -178,8 +181,10 @@ final class LiveTranscriber {
     }
 
     private func cycleTask() {
-        activeRequest = nil
-        request?.endAudio()
+        // End audio only when no audio-thread append is mid-flight (lock), then call
+        // endAudio() on the snapshot OUTSIDE the lock so we never hold it across SFSpeech.
+        requestLock.lock(); let dying = activeRequest; activeRequest = nil; requestLock.unlock()
+        dying?.endAudio()
         task = nil
         request = nil
         guard keepRunning, isRunning else { return }
@@ -214,8 +219,8 @@ final class LiveTranscriber {
         if let o = configObserver { NotificationCenter.default.removeObserver(o); configObserver = nil }
         guard isRunning else { return }
         isRunning = false
-        activeRequest = nil
-        request?.endAudio()
+        requestLock.lock(); let dying = activeRequest; activeRequest = nil; requestLock.unlock()
+        dying?.endAudio()
         task?.cancel()
         request = nil
         task = nil
@@ -224,7 +229,9 @@ final class LiveTranscriber {
         accumulated = ""; currentPartial = ""
     }
 
-    private static func localeId(for language: String?) -> String? {
+    /// Shared so TTS (Speaker) and recognition resolve a language name to the same
+    /// BCP-47 locale. Internal + nonisolated (pure) for reuse across the Voice module.
+    nonisolated static func localeId(for language: String?) -> String? {
         guard let l = language?.lowercased() else { return "en-GB" }
         let map: [String: String] = [
             "english": "en-GB", "romanian": "ro-RO", "spanish": "es-ES", "polish": "pl-PL",

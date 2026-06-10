@@ -237,9 +237,14 @@ export default {
             expires_after: { anchor: "created_at", seconds: 600 },
           }),
         });
-        const data = await resp.json();
+        const data: any = await resp.json().catch(() => ({}));
         // The app reads the top-level `value` (GA) or client_secret.value (older).
-        return json(data, resp.status);
+        // Treat a malformed-but-200 upstream as a real failure (parity with the other
+        // routes) so the app shows "can't reach voice" + Retry rather than a 200 it rejects.
+        if (!resp.ok || !(data?.value || data?.client_secret?.value)) {
+          return json({ error: "token mint failed", status: resp.status }, 502);
+        }
+        return json(data, 200);
       } catch (e) {
         return json({ error: "token mint failed", detail: String(e) }, 502);
       }

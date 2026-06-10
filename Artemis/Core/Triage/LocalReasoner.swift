@@ -27,8 +27,12 @@ final class LocalReasoner {
     func handle(_ text: String) async -> LocalOutcome {
         let lower = text.lowercased()
 
-        // 1. Crisis always first, and gently.
-        if isCrisis(lower) {
+        // 1. Crisis always first, and gently. Union the local heuristic with the
+        // stronger SafeChecker list so explicit self-harm phrases ("suicidal",
+        // "want to die", "overdose", "end my life", "take my life", "wish i was
+        // dead") can NEVER fall through to a chat reply on the offline voice path —
+        // it must be at least as safe as the typed safe-check path.
+        if isCrisis(lower) || SafeChecker.isConcerning(text) {
             return .crisis(.default)
         }
 

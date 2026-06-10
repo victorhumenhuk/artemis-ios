@@ -48,7 +48,7 @@ struct AdvocacySheetView: View {
                             copied = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { copied = false }
                         }
-                        secondaryButton("Read aloud", icon: "ear") { Speaker.shared.speak(script.plainText) }
+                        secondaryButton("Read aloud", icon: "ear") { Speaker.shared.speak(script.plainText, language: script.language) }
                     }
                     .padding(.top, 16)
 
@@ -72,13 +72,17 @@ struct AdvocacySheetView: View {
     }
 }
 
-/// Small shared TTS for "Read aloud".
+/// Small shared TTS for "Read aloud". Reads in HER language: an AI advocacy
+/// script generated in Arabic/Bengali/etc. must not be voiced with an en-GB
+/// voice (silent for non-Latin scripts, mispronounced for Latin ones).
 final class Speaker {
     static let shared = Speaker()
     private let synth = AVSpeechSynthesizer()
-    func speak(_ text: String) {
+    func speak(_ text: String, language: String? = nil) {
         let u = AVSpeechUtterance(string: text)
-        u.voice = AVSpeechSynthesisVoice(language: "en-GB")
+        let localeId = LiveTranscriber.localeId(for: language) ?? "en-GB"
+        u.voice = AVSpeechSynthesisVoice(language: localeId)
+            ?? AVSpeechSynthesisVoice(language: "en-GB")
         u.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
         synth.speak(u)
     }
